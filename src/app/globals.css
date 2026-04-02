@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --csn-navy:  #1a3a5c;
+  --csn-blue:  #2e6da4;
+  --csn-light: #ddeaf6;
+  --csn-cream: #f4f7fa;
+  --csn-border: rgba(46, 109, 164, 0.2);
+  --csn-border-strong: rgba(46, 109, 164, 0.3);
+}
+
+body {
+  background-color: var(--csn-cream);
+  color: #1a2e3f;
+}
+
+/* Scrollbar discrète */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--csn-border-strong); border-radius: 3px; }

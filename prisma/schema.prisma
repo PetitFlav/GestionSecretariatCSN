@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Saisons ─────────────────────────────────────────────────────────────────
+
+model Saison {
+  id          String   @id @default(cuid())
+  label       String   @unique  // ex: "2025-2026"
+  dateExpire  String             // ex: "31/12/2026"
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  adherents         Adherent[]
+  impressions       Impression[]
+  attestationEmails AttestationEmail[]
+  validations       ValidationFFESSM[]
+
+  @@map("saisons")
+}
+
+// ─── Adhérents ────────────────────────────────────────────────────────────────
+
+model Adherent {
+  id              String   @id @default(cuid())
+  saisonId        String
+  nom             String
+  prenom          String
+  dateNaissance   String
+  email           String?
+  montant         String?
+  dateExpiration  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  saison            Saison             @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+  impressions       Impression[]
+  attestationEmails AttestationEmail[]
+  validation        ValidationFFESSM?
+
+  @@unique([saisonId, nom, prenom, dateNaissance])
+  @@index([saisonId])
+  @@index([nom, prenom])
+  @@index([nom, prenom, dateNaissance])
+  @@map("adherents")
+}
+
+// ─── Impressions ──────────────────────────────────────────────────────────────
+
+model Impression {
+  id           String      @id @default(cuid())
+  adherentId   String
+  saisonId     String
+  zplChecksum  String?
+  status       PrintStatus @default(PRINTED)
+  printedAt    DateTime    @default(now())
+
+  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison   Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+
+  @@index([adherentId, saisonId])
+  @@index([saisonId])
+  @@index([status, printedAt])
+  @@map("impressions")
+}
+
+// ─── Attestations email ───────────────────────────────────────────────────────
+
+model AttestationEmail {
+  id         String   @id @default(cuid())
+  adherentId String
+  saisonId   String
+  email      String?
+  sentAt     DateTime @default(now())
+
+  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison   Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+
+  @@index([adherentId, saisonId])
+  @@index([sentAt])
+  @@map("attestation_emails")
+}
+
+// ─── Validation FFESSM ────────────────────────────────────────────────────────
+
+model ValidationFFESSM {
+  id          String       @id @default(cuid())
+  adherentId  String       @unique
+  saisonId    String
+  statut      StatutFFESSM @default(NON_SOUMIS)
+  validateur  String?
+  updatedAt   DateTime     @updatedAt
+
+  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison   Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+
+  @@index([saisonId, statut])
+  @@map("validations_ffessm")
+}
+
+// ─── Utilisateurs ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  firstName    String    @default("")
+  lastName     String    @default("")
+  email        String    @unique
+  passwordHash String    @default("")
+  role         UserRole  @default(USER)
+  status       UserStatus @default(PENDING)
+  // Token pour la création de mot de passe (lien email)
+  setupToken   String?
+  setupTokenExpiry DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("users")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum PrintStatus {
+  PRINTED
+  SIMULATED
+}
+
+enum StatutFFESSM {
+  VALIDE
+  EN_ATTENTE
+  NON_SOUMIS
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPERUSER
+}
+
+enum UserStatus {
+  PENDING    // en attente de validation par un admin
+  ACTIVE     // compte actif
+  DISABLED   // désactivé
+}
