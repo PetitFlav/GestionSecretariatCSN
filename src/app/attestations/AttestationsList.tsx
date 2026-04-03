@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useTransition, useCallback } from 'react'
 import Link from 'next/link'
-import { getAdherentsAttestations, AdherentAttestation, AdherentFilters } from '@/app/actions/adherents'
+import { getAdherentsAttestations, AdherentAttestation, AdherentFilters, getSaisonActive } from '@/app/actions/adherents'
+import { envoyerAttestations, SendResult } from '@/app/actions/attestations'
 
 interface Props { saisonId: string; saisonLabel: string }
 
@@ -14,6 +15,8 @@ export default function AttestationsList({ saisonId, saisonLabel }: Props) {
   const [page, setPage]             = useState(1)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [filters, setFilters]       = useState<AdherentFilters>({ search: '', attestation: '' })
+  const [sendResult, setSendResult]   = useState<SendResult | null>(null)
+  const [isSending, startSending]     = useTransition()
 
   const load = useCallback((f: AdherentFilters, p: number) => {
     startTransition(async () => {
@@ -83,15 +86,48 @@ export default function AttestationsList({ saisonId, saisonLabel }: Props) {
             </button>
             {selected.size > 0 && (
               <button
-                className="text-[11px] px-3 py-1 rounded border hover:bg-blue-50 transition-colors"
+                className="text-[11px] px-3 py-1 rounded border hover:bg-blue-50 transition-colors disabled:opacity-50"
                 style={{ borderColor: 'var(--csn-border-strong)', color: '#185fa5' }}
-                onClick={() => alert(`Envoi attestation à ${selected.size} adhérent(s) — à venir Phase 4`)}>
-                ✉ Envoyer ({selected.size})
+                disabled={isSending}
+                onClick={() => {
+                  startSending(async () => {
+                    setSendResult(null)
+                    const ids = Array.from(selected)
+                    const res = await envoyerAttestations(ids, saisonId)
+                    setSendResult(res)
+                    if (res.envoyes > 0) load(filters, 1)
+                  })
+                }}>
+                {isSending ? 'Envoi…' : `✉ Envoyer (${selected.size})`}
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Résultat envoi */}
+      {sendResult && (
+        <div className="rounded-xl p-4"
+          style={{ background: sendResult.success ? '#eaf7f0' : '#fff8e6', border: `0.5px solid ${sendResult.success ? '#7dd4a8' : '#e8c96a'}` }}>
+          {sendResult.envoyes > 0 && (
+            <p className="text-[13px] font-medium mb-1" style={{ color: '#1a6642' }}>
+              ✓ {sendResult.envoyes} attestation{sendResult.envoyes > 1 ? 's' : ''} envoyée{sendResult.envoyes > 1 ? 's' : ''}
+            </p>
+          )}
+          {sendResult.erreurs.length > 0 && (
+            <div>
+              <p className="text-[13px] font-medium mb-1" style={{ color: '#7a5a00' }}>
+                {sendResult.erreurs.length} erreur{sendResult.erreurs.length > 1 ? 's' : ''} :
+              </p>
+              {sendResult.erreurs.map((e, i) => (
+                <p key={i} className="text-[12px] text-slate-500">
+                  • {e.prenom} {e.nom} — {e.raison}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tableau */}
       <div className="bg-white rounded-xl overflow-hidden"

@@ -140,7 +140,30 @@ model User {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
+  smtpConfig UserSmtpConfig?
+
   @@map("users")
+}
+
+// ─── Config SMTP utilisateur ─────────────────────────────────────────────────
+
+model UserSmtpConfig {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  provider    String?
+  hostEnc     String?
+  portEnc     String?
+  secureEnc   String?
+  userEnc     String?
+  passwordEnc String?
+  fromEnc     String?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_smtp_configs")
 }
 
 enum PrintStatus {
