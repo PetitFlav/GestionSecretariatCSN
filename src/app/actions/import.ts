@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/db'
-import { encrypt, decrypt } from '@/lib/crypto'
+import { encrypt, decrypt, keysMatch } from '@/lib/crypto'
 import { parseMembres } from '@/lib/parsers/membres'
 import { parsePaiements } from '@/lib/parsers/paiements'
 import { parseFFESSM, adressesDifferentes } from '@/lib/parsers/ffessm'
@@ -69,11 +69,21 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
 
   for (const membre of membres) {
     try {
-      // Jointure avec paiements (clé normalisée nom|prenom)
-      const paiement = paiements.get(membre.key)
+      // Jointure avec paiements — teste toutes les variantes tiret/espace
+      let paiement = paiements.get(membre.key)
+      if (!paiement) {
+        for (const [k, v] of paiements.entries()) {
+          if (keysMatch(membre.key, k)) { paiement = v; break }
+        }
+      }
 
-      // Jointure avec FFESSM
-      const ffessm = ffessmMap.get(membre.key)
+      // Jointure avec FFESSM — idem
+      let ffessm = ffessmMap.get(membre.key)
+      if (!ffessm) {
+        for (const [k, v] of ffessmMap.entries()) {
+          if (keysMatch(membre.key, k)) { ffessm = v; break }
+        }
+      }
 
       // Détecter désynchronisation adresse
       let adresseDesync = false
@@ -126,12 +136,34 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
         adresseDesync,
       }
 
+      let adherentId: string
       if (existing) {
         await prisma.adherent.update({ where: { id: existing.id }, data })
+        adherentId = existing.id
         misAJour++
       } else {
-        await prisma.adherent.create({ data })
+        const created = await prisma.adherent.create({ data })
+        adherentId = created.id
         crees++
+      }
+
+      // Stocker l'adresse FFESSM chiffrée dans ValidationFFESSM
+      if (ffessm?.ffessmId) {
+        await prisma.validationFFESSM.upsert({
+          where:  { adherentId },
+          create: {
+            adherentId,
+            saisonId,
+            adresseEnc:    encrypt(ffessm.adresse),
+            codePostalEnc: encrypt(ffessm.codePostal),
+            villeEnc:      encrypt(ffessm.ville),
+          },
+          update: {
+            adresseEnc:    encrypt(ffessm.adresse),
+            codePostalEnc: encrypt(ffessm.codePostal),
+            villeEnc:      encrypt(ffessm.ville),
+          },
+        })
       }
     } catch (err) {
       ignores++

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { normalizeNom, formatDate } from '@/lib/crypto'
+import { makeKey, cleanName, formatDate } from '@/lib/crypto'
 
 export interface MembreRow {
   nom: string
@@ -103,19 +103,31 @@ export function parseMembres(buffer: ArrayBuffer): {
       ? String(cpRaw).replace('.0', '').padStart(5, '0')
       : null
 
+    // Adresse : on nettoie la rue (accents, tirets) mais on conserve les chiffres
+    const adresseRaw = toStr(row[COL.adresse])
+    const adresse = adresseRaw
+      ? adresseRaw
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')  // accents
+          .toUpperCase()
+          .replace(/[-'\u2019\u2018]/g, ' ') // tirets/apostrophes → espace
+          .replace(/\s+/g, ' ')
+          .trim()
+      : null
+
     membres.push({
-      nom,
-      prenom,
+      nom:            cleanName(nom),
+      prenom:         cleanName(prenom),
       civilite,
       licence:        toStr(row[COL.licence]),
       dateExpiration: toDate(row[COL.dateExpiration]),
       email:          toStr(row[COL.email]),
       dateNaissance:  toDate(row[COL.dateNaissance]),
-      adresse:        toStr(row[COL.adresse]),
-      codePostal,
-      ville:          toStr(row[COL.ville]),
+      adresse,
+      codePostal,      // déjà normalisé (padStart 5 chiffres)
+      ville:          toStr(row[COL.ville]) ? cleanName(toStr(row[COL.ville])!) : null,
       caci:           toDate(row[COL.caci]),
-      key:            `${normalizeNom(nom)}|${normalizeNom(prenom)}`,
+      key:            makeKey(cleanName(nom), cleanName(prenom)),
     })
   }
 

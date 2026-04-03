@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { normalizeNom } from '@/lib/crypto'
+import { makeKey, cleanName } from '@/lib/crypto'
 
 export interface PaiementRow {
   nom: string
@@ -90,7 +90,7 @@ export function parsePaiements(buffer: ArrayBuffer, saisonLabel: string): {
     const montant = parseFloat(montantStr) || 0
 
     const datePaiement = String(row['Date paiement'] ?? '').trim()
-    const key = `${normalizeNom(parsed.nom)}|${normalizeNom(parsed.prenom)}`
+    const key = makeKey(cleanName(parsed.nom), cleanName(parsed.prenom))
 
     if (paiements.has(key)) {
       // Additionner les montants, concaténer les dates
@@ -101,8 +101,8 @@ export function parsePaiements(buffer: ArrayBuffer, saisonLabel: string): {
       }
     } else {
       paiements.set(key, {
-        nom:           parsed.nom,
-        prenom:        parsed.prenom,
+        nom:           cleanName(parsed.nom),
+        prenom:        cleanName(parsed.prenom),
         montantTotal:  montant,
         datesPaiement: datePaiement ? [datePaiement] : [],
         key,

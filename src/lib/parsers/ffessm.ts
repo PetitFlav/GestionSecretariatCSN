@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { normalizeNom, formatDate } from '@/lib/crypto'
+import { makeKey, cleanName, formatDate } from '@/lib/crypto'
 
 export interface FFESSMRow {
   nom: string
@@ -36,7 +36,19 @@ export function parseFFESSM(buffer: ArrayBuffer): {
     const adresse1 = String(row['Adresse1'] ?? '').trim() || null
     const adresse2 = String(row['Adresse2'] ?? '').trim() || null
     // Combiner Adresse1 + Adresse2 si les deux existent
-    const adresse = [adresse1, adresse2].filter(Boolean).join(', ') || null
+    // Nettoyer l'adresse : accents, tirets, casse — mais conserver les chiffres
+    function cleanAdresse(s: string | null): string | null {
+      if (!s) return null
+      return s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[-'\u2019\u2018]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || null
+    }
+
+    const adresse = cleanAdresse([adresse1, adresse2].filter(Boolean).join(' ')) || null
 
     const cpRaw = row['Code Postal']
     const codePostal = cpRaw
@@ -50,15 +62,17 @@ export function parseFFESSM(buffer: ArrayBuffer): {
         ? String(dateFinRaw).trim()
         : null
 
-    const key = `${normalizeNom(nom)}|${normalizeNom(prenom)}`
+    const key = makeKey(cleanName(nom), cleanName(prenom))
 
     ffessm.set(key, {
-      nom,
-      prenom,
-      ffessmId:    String(row['Identifiant'] ?? '').trim() || null,
+      nom:      cleanName(nom),
+      prenom:   cleanName(prenom),
+      ffessmId: String(row['Identifiant'] ?? '').trim() || null,
       adresse,
       codePostal,
-      ville:       String(row['Commune'] ?? '').trim() || null,
+      ville:    String(row['Commune'] ?? '').trim()
+                  ? cleanName(String(row['Commune']).trim())
+                  : null,
       dateFinCaci,
       key,
     })
@@ -74,14 +88,10 @@ export function adressesDifferentes(
   adresseClub: { adresse: string | null; cp: string | null; ville: string | null },
   adresseFFESSM: { adresse: string | null; cp: string | null; ville: string | null }
 ): boolean {
+  // On utilise cleanName pour normaliser : accents, tirets, casse → comparaison robuste
   function norm(s: string | null): string {
     if (!s) return ''
-    return s
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, ' ')
+    return cleanName(s)
   }
 
   return (

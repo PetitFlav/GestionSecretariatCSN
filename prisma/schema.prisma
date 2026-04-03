@@ -50,7 +50,9 @@ model Adherent {
   villeEnc          String?
 
   ffessmId          String?
-  adresseDesync     Boolean @default(false)
+  adresseDesync     Boolean @default(false)  // Adresse différente entre Membres et FFESSM
+  passager          Boolean @default(false)  // Prend sa licence dans un autre club
+  section           String?                  // Section (Apnée/Plongée) — 4ème fichier à venir
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -110,6 +112,10 @@ model ValidationFFESSM {
   saisonId    String
   statut      StatutFFESSM @default(NON_SOUMIS)
   validateur  String?
+  // Adresse FFESSM chiffrée (pour comparaison avec adresse VPdive)
+  adresseEnc    String?
+  codePostalEnc String?
+  villeEnc      String?
   updatedAt   DateTime     @updatedAt
 
   adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)

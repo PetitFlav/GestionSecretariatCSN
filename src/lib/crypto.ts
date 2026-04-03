@@ -60,15 +60,135 @@ export function decrypt(value: string | null | undefined): string | null {
 }
 
 /**
- * Normalise un nom/prénom pour la comparaison (sans accents, minuscules, sans espaces multiples)
+ * Nettoie un nom/prénom/ville pour le STOCKAGE en base :
+ * - Supprime les diacritiques (é→E, ç→C, à→A, ë→E, etc.)
+ * - Majuscules
+ * - Tirets et apostrophes → espace
+ * - Espaces multiples → un seul
+ * Utilisé à l'import pour normaliser les données avant insertion.
  */
-export function normalizeNom(value: string): string {
+export function cleanName(value: string): string {
+  if (!value) return ''
   return value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // supprime les diacritiques
-    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')    // diacritiques
+    .toUpperCase()
+    .replace(/[-'\u2019\u2018\u02bc]/g, ' ') // tirets et apostrophes → espace
+    .replace(/[^A-Z ]/g, '')              // garder seulement lettres et espaces
+    .replace(/\s+/g, ' ')                // espaces multiples → un seul
     .trim()
-    .replace(/\s+/g, ' ')
+}
+
+/**
+ * Normalise un nom/prénom pour la comparaison :
+ * - Supprime les diacritiques (é→e, ç→c, à→a, etc.)
+ * - Minuscules
+ * - Remplace tirets et apostrophes (toutes variantes) par espace
+ * - Supprime tout sauf lettres et espaces
+ * - Normalise les espaces multiples
+ */
+export function normalizeNom(value: string): string {
+  if (!value) return ''
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // diacritiques
+    .toLowerCase()
+    .replace(/[-'\u2019\u2018\u02bc]/g, ' ') // tirets et apostrophes → espace
+    .replace(/[^a-z ]/g, '')             // garder seulement lettres et espaces
+    .replace(/\s+/g, ' ')               // espaces multiples → un seul
+    .trim()
+}
+
+/**
+ * Génère toutes les variantes d'une clé "nom|prenom" :
+ * - Variantes tiret/espace (JEAN-PAUL ↔ JEAN PAUL)
+ */
+function variantesKey(key: string): Set<string> {
+  const result = new Set<string>([key])
+  const parts = key.split('|')
+
+  for (let pi = 0; pi < parts.length; pi++) {
+    const words = parts[pi].split(' ')
+    const n = words.length
+    if (n < 2) continue
+
+    const totalMasks = Math.pow(2, n - 1)
+    for (let mask = 1; mask < totalMasks; mask++) {
+      let newPart = words[0]
+      for (let bit = 0; bit < n - 1; bit++) {
+        const sep = (mask >> bit) & 1 ? '-' : ' '
+        newPart += sep + words[bit + 1]
+      }
+      const newParts = [...parts]
+      newParts[pi] = newPart
+      result.add(newParts.join('|'))
+    }
+  }
+  return result
+}
+
+/**
+ * Clé avec les mots de chaque partie triés alphabétiquement.
+ * Permet de matcher CORMIER COURBET ↔ COURBET CORMIER.
+ */
+function sortedKey(key: string): string {
+  return key.split('|')
+    .map(part => part.split(' ').sort().join(' '))
+    .join('|')
+}
+
+/**
+ * Variantes avec mots concaténés : LA TOUR ↔ LATOUR
+ */
+function concatVariants(key: string): Set<string> {
+  const result = new Set<string>([key])
+  const parts = key.split('|')
+  for (let pi = 0; pi < parts.length; pi++) {
+    const words = parts[pi].split(' ')
+    const n = words.length
+    if (n < 2) continue
+    for (let i = 0; i < n - 1; i++) {
+      const newWords = [...words.slice(0, i), words[i] + words[i + 1], ...words.slice(i + 2)]
+      const newParts = [...parts]
+      newParts[pi] = newWords.join(' ')
+      result.add(newParts.join('|'))
+    }
+  }
+  return result
+}
+
+/**
+ * Compare deux clés normalisées avec plusieurs stratégies :
+ * 1. Égalité directe
+ * 2. Variantes tiret/espace (JEAN-PAUL ↔ JEAN PAUL)
+ * 3. Ordre des mots du nom inversé (CORMIER COURBET ↔ COURBET CORMIER)
+ * 4. Mots concaténés (LA TOUR ↔ LATOUR, CONTAMINE DE LATOUR ↔ CONTAMINE DE LA TOUR)
+ */
+export function keysMatch(key1: string, key2: string): boolean {
+  if (key1 === key2) return true
+
+  // 1. Variantes tiret/espace
+  const v1 = variantesKey(key1)
+  const v2 = variantesKey(key2)
+  for (const k of v1) { if (v2.has(k)) return true }
+
+  // 2. Ordre des mots du nom inversé
+  if (sortedKey(key1) === sortedKey(key2)) return true
+
+  // 3. Mots concaténés (LA TOUR ↔ LATOUR)
+  const c1 = concatVariants(key1)
+  const c2 = concatVariants(key2)
+  for (const k of c1) { if (c2.has(k) || v2.has(k)) return true }
+  for (const k of c2) { if (v1.has(k)) return true }
+
+  return false
+}
+
+/**
+ * Crée la clé de jointure normalisée pour un nom+prénom
+ */
+export function makeKey(nom: string, prenom: string): string {
+  return `${normalizeNom(nom)}|${normalizeNom(prenom)}`
 }
 
 /**

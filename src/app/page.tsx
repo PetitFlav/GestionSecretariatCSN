@@ -34,16 +34,14 @@ export default async function HomePage() {
         </Link>
 
         {/* Boutons secondaires côte à côte */}
-        <div className="grid grid-cols-2 gap-3">
-          <Link
-            href="/adherents"
+        <div className="grid grid-cols-3 gap-3">
+
+          {/* Édition étiquettes */}
+          <Link href="/adherents"
             className="flex flex-col gap-2.5 rounded-xl p-4 bg-white transition-colors hover:bg-slate-50"
-            style={{ border: '0.5px solid var(--csn-border-strong)' }}
-          >
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--csn-light)' }}
-            >
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'var(--csn-light)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
                 <rect x="2" y="5" width="20" height="14" rx="2"/>
                 <path d="M2 10h20"/>
@@ -57,15 +55,12 @@ export default async function HomePage() {
             </div>
           </Link>
 
-          <Link
-            href="/attestations"
+          {/* Envoi attestations */}
+          <Link href="/attestations"
             className="flex flex-col gap-2.5 rounded-xl p-4 bg-white transition-colors hover:bg-slate-50"
-            style={{ border: '0.5px solid var(--csn-border-strong)' }}
-          >
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--csn-light)' }}
-            >
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'var(--csn-light)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                 <polyline points="22,6 12,13 2,6"/>
@@ -78,6 +73,25 @@ export default async function HomePage() {
               <div className="text-[11px] text-slate-400 mt-0.5">PDF par email</div>
             </div>
           </Link>
+
+          {/* Suivi & alertes */}
+          <Link href="/suivi"
+            className="flex flex-col gap-2.5 rounded-xl p-4 bg-white transition-colors hover:bg-slate-50"
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'var(--csn-light)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[13px] font-medium" style={{ color: 'var(--csn-navy)' }}>
+                Suivi & alertes
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">CACI, FFESSM</div>
+            </div>
+          </Link>
+
         </div>
       </div>
     </AppLayout>
