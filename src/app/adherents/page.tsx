@@ -7,7 +7,7 @@ export default async function AdherentsPage() {
   if (!user || user.status !== 'ACTIVE') redirect('/login')
 
   return (
-    <AppLayout user={user}>
+    <AppLayout user={user} showBack={true}>
       <div className="max-w-4xl mx-auto px-4 py-10">
         <h1 className="text-[16px] font-medium mb-2" style={{ color: 'var(--csn-navy)' }}>
           Édition des étiquettes

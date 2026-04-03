@@ -79,7 +79,6 @@ export default async function HomePage() {
             </div>
           </Link>
         </div>
-
       </div>
     </AppLayout>
   )

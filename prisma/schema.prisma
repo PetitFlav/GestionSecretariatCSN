@@ -11,12 +11,14 @@ datasource db {
 // ─── Saisons ─────────────────────────────────────────────────────────────────
 
 model Saison {
-  id          String   @id @default(cuid())
-  label       String   @unique  // ex: "2025-2026"
-  dateExpire  String             // ex: "31/12/2026"
-  isActive    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  label               String   @unique   // ex: "2025-2026"
+  dateDebut           String             // ex: "01/09/2025"
+  dateFin             String             // ex: "31/07/2026"
+  dateExpireLicence   String             // ex: "31/12/2026"
+  isActive            Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   adherents         Adherent[]
   impressions       Impression[]
@@ -31,12 +33,25 @@ model Saison {
 model Adherent {
   id              String   @id @default(cuid())
   saisonId        String
+
   nom             String
   prenom          String
-  dateNaissance   String
-  email           String?
+  civilite        String?
+  licence         String?
   montant         String?
-  dateExpiration  String?
+  datePaiement    String?
+  dateExpiration  String?            // Date expiration licence FFESSM (31/12/20xx)
+  caci             String?            // Date certificat médical (valable 1 an)
+
+  emailEnc          String?
+  dateNaissanceEnc  String?
+  adresseEnc        String?
+  codePostalEnc     String?
+  villeEnc          String?
+
+  ffessmId          String?
+  adresseDesync     Boolean @default(false)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -45,10 +60,9 @@ model Adherent {
   attestationEmails AttestationEmail[]
   validation        ValidationFFESSM?
 
-  @@unique([saisonId, nom, prenom, dateNaissance])
+  @@unique([saisonId, nom, prenom])
   @@index([saisonId])
   @@index([nom, prenom])
-  @@index([nom, prenom, dateNaissance])
   @@map("adherents")
 }
 
@@ -108,23 +122,20 @@ model ValidationFFESSM {
 // ─── Utilisateurs ─────────────────────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(cuid())
-  firstName    String    @default("")
-  lastName     String    @default("")
-  email        String    @unique
-  passwordHash String    @default("")
-  role         UserRole  @default(USER)
-  status       UserStatus @default(PENDING)
-  // Token pour la création de mot de passe (lien email)
-  setupToken   String?
+  id               String     @id @default(cuid())
+  firstName        String     @default("")
+  lastName         String     @default("")
+  email            String     @unique
+  passwordHash     String     @default("")
+  role             UserRole   @default(USER)
+  status           UserStatus @default(PENDING)
+  setupToken       String?
   setupTokenExpiry DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   @@map("users")
 }
-
-// ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum PrintStatus {
   PRINTED
@@ -144,7 +155,7 @@ enum UserRole {
 }
 
 enum UserStatus {
-  PENDING    // en attente de validation par un admin
-  ACTIVE     // compte actif
-  DISABLED   // désactivé
+  PENDING
+  ACTIVE
+  DISABLED
 }
