@@ -215,7 +215,7 @@ export async function approveUserAction(
       },
     })
 
-    await sendSetupEmail(user.email, token)
+    await sendSetupEmail(user.email, token, currentUser.id)
 
     return { success: `Compte approuvé — email envoyé à ${user.email}` }
   } catch (err) {

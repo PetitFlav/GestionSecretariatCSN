@@ -48,11 +48,21 @@ function toDate(val: unknown): string | null {
   if (!val || String(val).trim() === 'nan') return null
   if (val instanceof Date) return formatDate(val)
   const s = String(val).trim()
-  // Format ISO yyyy-mm-dd
+
+  // Ignorer les valeurs textuelles sans date (ex: "À faire", "CACI")
+  if (!/\d/.test(s)) return null
+
+  // Format ISO yyyy-mm-dd (avec ou sans heure)
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
-  // Déjà JJ/MM/AAAA
+
+  // Format JJ/MM/AAAA suivi d'un texte optionnel (ex: "01/04/2027 À valider")
+  const frWithText = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (frWithText) return `${frWithText[1]}/${frWithText[2]}/${frWithText[3]}`
+
+  // Format JJ/MM/AAAA seul
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s
+
   return null
 }
 
