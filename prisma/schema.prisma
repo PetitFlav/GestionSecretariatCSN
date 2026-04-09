@@ -8,58 +8,50 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ─── Saisons ─────────────────────────────────────────────────────────────────
-
 model Saison {
-  id                  String   @id @default(cuid())
-  label               String   @unique   // ex: "2025-2026"
-  dateDebut           String             // ex: "01/09/2025"
-  dateFin             String             // ex: "31/07/2026"
-  dateExpireLicence   String             // ex: "31/12/2026"
-  isActive            Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
+  id                String             @id @default(cuid())
+  label             String             @unique
+  isActive          Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  dateDebut         String
+  dateExpireLicence String
+  dateFin           String
   adherents         Adherent[]
-  impressions       Impression[]
   attestationEmails AttestationEmail[]
+  impressions       Impression[]
+  rappelsCaci       RappelCaci[]
   validations       ValidationFFESSM[]
 
   @@map("saisons")
 }
 
-// ─── Adhérents ────────────────────────────────────────────────────────────────
-
 model Adherent {
-  id              String   @id @default(cuid())
-  saisonId        String
-
-  nom             String
-  prenom          String
-  civilite        String?
-  licence         String?
-  montant         String?
-  datePaiement    String?
-  dateExpiration  String?            // Date expiration licence FFESSM (31/12/20xx)
-  caci             String?            // Date certificat médical (valable 1 an)
-
-  emailEnc          String?
-  dateNaissanceEnc  String?
+  id                String             @id @default(cuid())
+  saisonId          String
+  nom               String
+  prenom            String
+  montant           String?
+  dateExpiration    String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  adresseDesync     Boolean            @default(false)
   adresseEnc        String?
+  civilite          String?
   codePostalEnc     String?
-  villeEnc          String?
-
+  dateNaissanceEnc  String?
+  datePaiement      String?
+  emailEnc          String?
   ffessmId          String?
-  adresseDesync     Boolean @default(false)  // Adresse différente entre Membres et FFESSM
-  passager          Boolean @default(false)  // Prend sa licence dans un autre club
-  section           String?                  // Section (Apnée/Plongée) — 4ème fichier à venir
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  licence           String?
+  villeEnc          String?
+  caci              String?
+  passager          Boolean            @default(false)
+  section           String?
   saison            Saison             @relation(fields: [saisonId], references: [id], onDelete: Cascade)
-  impressions       Impression[]
   attestationEmails AttestationEmail[]
+  impressions       Impression[]
+  rappelsCaci       RappelCaci[]
   validation        ValidationFFESSM?
 
   @@unique([saisonId, nom, prenom])
@@ -68,18 +60,15 @@ model Adherent {
   @@map("adherents")
 }
 
-// ─── Impressions ──────────────────────────────────────────────────────────────
-
 model Impression {
-  id           String      @id @default(cuid())
-  adherentId   String
-  saisonId     String
-  zplChecksum  String?
-  status       PrintStatus @default(PRINTED)
-  printedAt    DateTime    @default(now())
-
-  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
-  saison   Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+  id          String      @id @default(cuid())
+  adherentId  String
+  saisonId    String
+  zplChecksum String?
+  status      PrintStatus @default(PRINTED)
+  printedAt   DateTime    @default(now())
+  adherent    Adherent    @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison      Saison      @relation(fields: [saisonId], references: [id], onDelete: Cascade)
 
   @@index([adherentId, saisonId])
   @@index([saisonId])
@@ -87,65 +76,53 @@ model Impression {
   @@map("impressions")
 }
 
-// ─── Attestations email ───────────────────────────────────────────────────────
-
 model AttestationEmail {
   id         String   @id @default(cuid())
   adherentId String
   saisonId   String
   email      String?
   sentAt     DateTime @default(now())
-
-  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
-  saison   Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+  adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison     Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
 
   @@index([adherentId, saisonId])
   @@index([sentAt])
   @@map("attestation_emails")
 }
 
-// ─── Validation FFESSM ────────────────────────────────────────────────────────
-
 model ValidationFFESSM {
-  id          String       @id @default(cuid())
-  adherentId  String       @unique
-  saisonId    String
-  statut      StatutFFESSM @default(NON_SOUMIS)
-  validateur  String?
-  // Adresse FFESSM chiffrée (pour comparaison avec adresse VPdive)
+  id            String       @id @default(cuid())
+  adherentId    String       @unique
+  saisonId      String
+  statut        StatutFFESSM @default(NON_SOUMIS)
+  validateur    String?
+  updatedAt     DateTime     @updatedAt
   adresseEnc    String?
   codePostalEnc String?
   villeEnc      String?
-  updatedAt   DateTime     @updatedAt
-
-  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
-  saison   Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+  adherent      Adherent     @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison        Saison       @relation(fields: [saisonId], references: [id], onDelete: Cascade)
 
   @@index([saisonId, statut])
   @@map("validations_ffessm")
 }
 
-// ─── Utilisateurs ─────────────────────────────────────────────────────────────
-
 model User {
-  id               String     @id @default(cuid())
-  firstName        String     @default("")
-  lastName         String     @default("")
-  email            String     @unique
-  passwordHash     String     @default("")
-  role             UserRole   @default(USER)
-  status           UserStatus @default(PENDING)
+  id               String          @id @default(cuid())
+  firstName        String          @default("")
+  lastName         String          @default("")
+  email            String          @unique
+  passwordHash     String          @default("")
+  role             UserRole        @default(USER)
+  status           UserStatus      @default(PENDING)
   setupToken       String?
   setupTokenExpiry DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-
-  smtpConfig UserSmtpConfig?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  smtpConfig       UserSmtpConfig?
 
   @@map("users")
 }
-
-// ─── Config SMTP utilisateur ─────────────────────────────────────────────────
 
 model UserSmtpConfig {
   id          String   @id @default(cuid())
@@ -160,10 +137,23 @@ model UserSmtpConfig {
   isVerified  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_smtp_configs")
+}
+
+model RappelCaci {
+  id         String   @id @default(cuid())
+  adherentId String
+  saisonId   String
+  email      String?
+  sentAt     DateTime @default(now())
+  adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  saison     Saison   @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+
+  @@index([adherentId])
+  @@index([saisonId])
+  @@map("rappels_caci")
 }
 
 enum PrintStatus {

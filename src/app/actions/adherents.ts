@@ -122,11 +122,12 @@ export async function getAdherentsAttestations(
 // ── Suivi & alertes ───────────────────────────────────────────────────────────
 
 export interface AlerteCaci {
-  id:     string
-  nom:    string
-  prenom: string
-  caci:   string
-  jours:  number
+  id:         string
+  nom:        string
+  prenom:     string
+  caci:       string
+  jours:      number
+  nbRappels:  number
 }
 
 export interface AlerteFFESSM {
@@ -166,14 +167,22 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   const ffessmAbsents:       AlerteFFESSM[] = []
   const ffessmDesync:        AlerteFFESSM[] = []
 
+  // Récupérer le nombre de rappels CACI par adhérent
+  const rappels = await prisma.rappelCaci.groupBy({
+    by: ['adherentId'],
+    where: { saisonId },
+    _count: { id: true },
+  })
+  const rappelsMap = new Map(rappels.map(r => [r.adherentId, r._count.id]))
+
   for (const a of adherents) {
     // CACI
     if (!a.caci) {
-      caciExpires.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: 'Non renseigné', jours: -999 })
+      caciExpires.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: 'Non renseigné', jours: -999, nbRappels: rappelsMap.get(a.id) ?? 0 })
     } else {
       const jours = diffJours(a.caci, now)
-      if (jours < 0)       caciExpires.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours })
-      else if (jours < 90) caciExpirentBientot.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours })
+      if (jours < 0)       caciExpires.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours, nbRappels: rappelsMap.get(a.id) ?? 0 })
+      else if (jours < 90) caciExpirentBientot.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours, nbRappels: rappelsMap.get(a.id) ?? 0 })
     }
 
     // FFESSM
