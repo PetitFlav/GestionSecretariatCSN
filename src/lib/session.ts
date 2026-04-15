@@ -28,7 +28,7 @@ export const sessionOptions: SessionOptions = {
   },
 }
 
-export async function getSession(): Promise<IronSession> {
+export async function getSession(): Promise<IronSession<{ user?: SessionUser }>> {
   const session = await getIronSession(await cookies(), sessionOptions)
   return session
 }
