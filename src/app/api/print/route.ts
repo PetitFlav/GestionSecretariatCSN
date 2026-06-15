@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
 
     if (jobs.length === 1) {
       const job = jobs[0]
-      return new NextResponse(job.pngBuffer, {
+      return new NextResponse(new Uint8Array(job.pngBuffer), {
         headers: {
           'Content-Type': 'image/png',
           'Content-Disposition': `attachment; filename="${job.filename}"`,
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
 
   if (jobs.length === 1) {
     const job = jobs[0]
-    return new NextResponse(job.pngBuffer, {
+    return new NextResponse(new Uint8Array(job.pngBuffer), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="${job.filename}"`,
