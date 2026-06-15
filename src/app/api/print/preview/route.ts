@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   const { pngBuffer, checksum, filename } = await generateLabelPng(data)
 
   if (format === 'png') {
-    return new NextResponse(pngBuffer, {
+    return new NextResponse(new Uint8Array(pngBuffer), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `inline; filename="${filename}"`,
