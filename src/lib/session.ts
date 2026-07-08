@@ -1,4 +1,4 @@
-import { getIronSession, IronSession, IronSessionOptions } from 'iron-session'
+import { getIronSession, IronSession, SessionOptions } from 'iron-session'
 import { cookies } from 'next/headers'
 import { UserRole, UserStatus } from '@prisma/client'
 
@@ -17,7 +17,7 @@ declare module 'iron-session' {
   }
 }
 
-export const sessionOptions: IronSessionOptions = {
+export const sessionOptions: SessionOptions = {
   cookieName: 'csn_session',
   password: process.env.SESSION_SECRET as string,
   cookieOptions: {
@@ -28,7 +28,7 @@ export const sessionOptions: IronSessionOptions = {
   },
 }
 
-export async function getSession(): Promise<IronSession> {
+export async function getSession(): Promise<IronSession<{ user?: SessionUser }>> {
   const session = await getIronSession(await cookies(), sessionOptions)
   return session
 }
