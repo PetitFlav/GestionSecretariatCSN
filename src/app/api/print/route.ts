@@ -1,11 +1,10 @@
 /**
  * src/app/api/print/route.ts
  *
- * GET  /api/print         → { agentAvailable: bool }
- * POST /api/print         → impression ou fallback PNG download
+ * GET  /api/print  → { agentAvailable: bool }
+ * POST /api/print  → impression ou fallback PNG download
  *
- * Body POST :
- *   { adherentIds: string[], force?: boolean, simulate?: boolean }
+ * Body POST : { adherentIds: string[], force?: boolean, simulate?: boolean }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,7 +15,6 @@ import { generateLabelPng, LabelData, LabelWidth } from '@/lib/label'
 const AGENT_URL        = 'http://localhost:3333'
 const AGENT_TIMEOUT_MS = 2000
 
-// ── Agent disponible ? ────────────────────────────────────────────────────────
 async function isAgentAvailable(): Promise<boolean> {
   try {
     const ctrl  = new AbortController()
@@ -24,24 +22,24 @@ async function isAgentAvailable(): Promise<boolean> {
     const res   = await fetch(`${AGENT_URL}/status`, { signal: ctrl.signal, cache: 'no-store' })
     clearTimeout(timer)
     return res.ok
-  } catch {
-    return false
-  }
+  } catch { return false }
 }
 
-// ── Envoi à l'agent ───────────────────────────────────────────────────────────
+// Envoie le PNG base64 + métadonnées à l'agent Windows
 async function sendToAgent(
-  nom: string, prenom: string, expire: string
+  nom: string, prenom: string, expire: string, pngBuffer: Buffer
 ): Promise<void> {
   const res = await fetch(`${AGENT_URL}/print`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nom, prenom, expire, copies: 1 }),
+    body: JSON.stringify({
+      nom, prenom, expire, copies: 1,
+      image: pngBuffer.toString('base64'),
+    }),
   })
   if (!res.ok) throw new Error(`Agent ${res.status}: ${await res.text()}`)
 }
 
-// ── Anti-doublon ──────────────────────────────────────────────────────────────
 async function isAlreadyPrinted(adherentId: string, saisonId: string): Promise<boolean> {
   const ex = await prisma.impression.findFirst({
     where: { adherentId, saisonId, status: 'PRINTED' },
@@ -58,7 +56,6 @@ async function recordImpression(
   })
 }
 
-// ── GET /api/print ────────────────────────────────────────────────────────────
 export async function GET() {
   const available = await isAgentAvailable()
   if (!available) return NextResponse.json({ agentAvailable: false })
@@ -66,14 +63,10 @@ export async function GET() {
     const res  = await fetch(`${AGENT_URL}/status`, { cache: 'no-store' })
     const data = await res.json()
     return NextResponse.json({ agentAvailable: true, ...data })
-  } catch {
-    return NextResponse.json({ agentAvailable: false })
-  }
+  } catch { return NextResponse.json({ agentAvailable: false }) }
 }
 
-// ── POST /api/print ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  // Auth
   const user = await getSessionUser()
   if (!user || user.status !== 'ACTIVE')
     return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
@@ -83,7 +76,6 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(adherentIds) || adherentIds.length === 0)
     return NextResponse.json({ error: 'Aucun adhérent sélectionné' }, { status: 400 })
 
-  // Charge les adhérents
   const adherents = await prisma.adherent.findMany({
     where: { id: { in: adherentIds } },
     select: { id: true, nom: true, prenom: true, dateExpiration: true, saisonId: true },
@@ -91,7 +83,6 @@ export async function POST(req: NextRequest) {
   if (adherents.length === 0)
     return NextResponse.json({ error: 'Adhérents introuvables' }, { status: 404 })
 
-  // Génère les PNG + filtre doublons
   const jobs: Array<{
     adherent: typeof adherents[0]
     pngBuffer: Buffer
@@ -124,7 +115,7 @@ export async function POST(req: NextRequest) {
       message: 'Toutes les étiquettes ont déjà été imprimées. Utilisez "Forcer" pour réimprimer.',
     })
 
-  // Mode simulate → PNG download direct sans passer par l'agent
+  // Mode simulate → PNG download direct
   if (simulate) {
     for (const job of jobs)
       await recordImpression(job.adherent.id, job.adherent.saisonId, job.checksum, 'SIMULATED')
@@ -156,8 +147,11 @@ export async function POST(req: NextRequest) {
     const errors: string[] = []
     for (const job of jobs) {
       try {
-        await sendToAgent(job.adherent.nom, job.adherent.prenom,
-          job.adherent.dateExpiration ?? '31/12/2025')
+        await sendToAgent(
+          job.adherent.nom, job.adherent.prenom,
+          job.adherent.dateExpiration ?? '31/12/2025',
+          job.pngBuffer
+        )
         await recordImpression(job.adherent.id, job.adherent.saisonId, job.checksum, 'PRINTED')
         printedCount++
       } catch (err) {
@@ -171,7 +165,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Fallback : agent absent → PNG download
+  // Fallback → PNG download
   for (const job of jobs)
     await recordImpression(job.adherent.id, job.adherent.saisonId, job.checksum, 'SIMULATED')
 

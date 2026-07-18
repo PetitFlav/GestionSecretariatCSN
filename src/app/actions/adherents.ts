@@ -28,15 +28,33 @@ export interface AdherentEtiquette {
   imprime:        boolean
 }
 
+/**
+ * Récupère la date d'expiration de licence attendue pour une saison.
+ * Filtre commun à toutes les listes : étiquettes, attestations, suivi.
+ * Garantit qu'on n'affiche que les membres actifs de la saison en cours.
+ */
+async function getSaisonDateExpire(saisonId: string): Promise<string | null> {
+  const saison = await prisma.saison.findUnique({
+    where:  { id: saisonId },
+    select: { dateExpireLicence: true },
+  })
+  return saison?.dateExpireLicence ?? null
+}
+
 export async function getAdherentsEtiquettes(
   saisonId: string,
   filters: AdherentFilters = {}
 ): Promise<{ adherents: AdherentEtiquette[]; total: number; page: number; totalPages: number }> {
   await requireAuth()
-  const page = filters.page ?? 1
-  const perPage = filters.perPage ?? 25
+  const page             = filters.page    ?? 1
+  const perPage          = filters.perPage ?? 25
+  const dateExpireLicence = await getSaisonDateExpire(saisonId)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { saisonId }
+  const where: any = {
+    saisonId,
+    ...(dateExpireLicence ? { dateExpiration: dateExpireLicence } : {}),
+  }
   if (filters.search?.trim()) {
     const s = filters.search.trim()
     where.OR = [
@@ -84,10 +102,15 @@ export async function getAdherentsAttestations(
   filters: AdherentFilters = {}
 ): Promise<{ adherents: AdherentAttestation[]; total: number; page: number; totalPages: number }> {
   await requireAuth()
-  const page = filters.page ?? 1
-  const perPage = filters.perPage ?? 25
+  const page             = filters.page    ?? 1
+  const perPage          = filters.perPage ?? 25
+  const dateExpireLicence = await getSaisonDateExpire(saisonId)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { saisonId }
+  const where: any = {
+    saisonId,
+    ...(dateExpireLicence ? { dateExpiration: dateExpireLicence } : {}),
+  }
   if (filters.search?.trim()) {
     const s = filters.search.trim()
     where.OR = [
@@ -122,12 +145,12 @@ export async function getAdherentsAttestations(
 // ── Suivi & alertes ───────────────────────────────────────────────────────────
 
 export interface AlerteCaci {
-  id:         string
-  nom:        string
-  prenom:     string
-  caci:       string
-  jours:      number
-  nbRappels:  number
+  id:        string
+  nom:       string
+  prenom:    string
+  caci:      string
+  jours:     number
+  nbRappels: number
 }
 
 export interface AlerteFFESSM {
@@ -140,22 +163,36 @@ export interface AlerteFFESSM {
 }
 
 export interface SuiviResult {
-  caciExpires:          AlerteCaci[]
-  caciExpirentBientot:  AlerteCaci[]
-  ffessmAbsents:        AlerteFFESSM[]
-  ffessmDesync:         AlerteFFESSM[]
-  totalAdherents:       number
-  totalAssures:         number
+  caciExpires:         AlerteCaci[]
+  caciExpirentBientot: AlerteCaci[]
+  ffessmAbsents:       AlerteFFESSM[]
+  ffessmDesync:        AlerteFFESSM[]
+  totalAdherents:      number
+  totalAssures:        number
 }
 
 export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   await requireAuth()
 
+  // Récupérer la date d'expiration de licence attendue pour cette saison
+  // ex: "31/12/2026" — seuls les adhérents avec cette dateExpiration
+  // sont considérés comme membres actifs de la saison en cours.
+  // Les autres (date différente ou null) sont des passagers d'une autre saison
+  // ou des entrées parasites à ignorer dans le suivi.
+  const saison = await prisma.saison.findUnique({
+    where:  { id: saisonId },
+    select: { dateExpireLicence: true },
+  })
+
+  const whereAdherents = saison?.dateExpireLicence
+    ? { saisonId, dateExpiration: saison.dateExpireLicence }
+    : { saisonId }  // fallback si dateExpireLicence non renseignée
+
   const adherents = await prisma.adherent.findMany({
-    where:   { saisonId },
+    where:   whereAdherents,
     orderBy: [{ nom: 'asc' }, { prenom: 'asc' }],
     select: {
-      id: true, nom: true, prenom: true,
+      id: true, nom: true, prenom: true, licence: true,
       caci: true, ffessmId: true, adresseDesync: true, passager: true,
       adresseEnc: true, codePostalEnc: true, villeEnc: true,
     },
@@ -168,38 +205,89 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   const ffessmDesync:        AlerteFFESSM[] = []
 
   // Récupérer le nombre de rappels CACI par adhérent
-  const rappels = await prisma.rappelCaci.groupBy({
-    by: ['adherentId'],
-    where: { saisonId },
-    _count: { id: true },
-  })
+  // Rappels CACI filtrés sur les mêmes adhérents (par leurs ids)
+  const adherentIds = adherents.map(a => a.id)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rappels: { adherentId: string; _count: { id: number } }[] = (prisma as any).rappelCaci
+    ? await prisma.rappelCaci.groupBy({
+        by:    ['adherentId'],
+        where: { saisonId, adherentId: { in: adherentIds } },
+        _count: { id: true },
+      })
+    : []
   const rappelsMap = new Map(rappels.map(r => [r.adherentId, r._count.id]))
 
   for (const a of adherents) {
-    // CACI
+    // ── CACI
     if (!a.caci) {
-      caciExpires.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: 'Non renseigné', jours: -999, nbRappels: rappelsMap.get(a.id) ?? 0 })
+      caciExpires.push({
+        id: a.id, nom: a.nom, prenom: a.prenom,
+        caci: 'Non renseigné', jours: -999,
+        nbRappels: rappelsMap.get(a.id) ?? 0,
+      })
     } else {
       const jours = diffJours(a.caci, now)
-      if (jours < 0)       caciExpires.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours, nbRappels: rappelsMap.get(a.id) ?? 0 })
-      else if (jours < 90) caciExpirentBientot.push({ id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours, nbRappels: rappelsMap.get(a.id) ?? 0 })
+      if (jours < 0) {
+        caciExpires.push({
+          id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours,
+          nbRappels: rappelsMap.get(a.id) ?? 0,
+        })
+      } else if (jours < 90) {
+        caciExpirentBientot.push({
+          id: a.id, nom: a.nom, prenom: a.prenom, caci: a.caci, jours,
+          nbRappels: rappelsMap.get(a.id) ?? 0,
+        })
+      }
     }
 
-    // FFESSM
+    // ── FFESSM
+    // La jointure lors de l'import est maintenant faite par numéro de licence
+    // (fallback nom+prénom si licence absente).
+    // ffessmId absent = licence VPdive non trouvée dans le fichier FFESSM importé
+    //                 = la personne n'est pas assurée FFESSM cette saison.
     if (!a.ffessmId && !a.passager) {
-      ffessmAbsents.push({ id: a.id, nom: a.nom, prenom: a.prenom, type: 'absent', passager: a.passager })
+      // Enrichir le détail avec le numéro de licence VPdive pour faciliter le diagnostic
+      const detailLicence = a.licence
+        ? `Licence ${a.licence} absente du fichier FFESSM`
+        : 'Aucun numéro de licence dans VPdive'
+
+      ffessmAbsents.push({
+        id:       a.id,
+        nom:      a.nom,
+        prenom:   a.prenom,
+        type:     'absent',
+        detail:   detailLicence,
+        passager: a.passager,
+      })
     } else if (a.adresseDesync) {
       const adresse = [decrypt(a.adresseEnc), decrypt(a.codePostalEnc), decrypt(a.villeEnc)]
         .filter(Boolean).join(' ')
-      ffessmDesync.push({ id: a.id, nom: a.nom, prenom: a.prenom, type: 'desync', detail: adresse || undefined, passager: a.passager })
+      ffessmDesync.push({
+        id:       a.id,
+        nom:      a.nom,
+        prenom:   a.prenom,
+        type:     'desync',
+        detail:   adresse || undefined,
+        passager: a.passager,
+      })
     }
   }
 
-  caciExpires.sort((a, b) => a.jours - b.jours)
-  caciExpirentBientot.sort((a, b) => a.jours - b.jours)
+  const alpha = (a: { nom: string; prenom: string }, b: { nom: string; prenom: string }) =>
+    a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr')
+
+  caciExpires.sort(alpha)
+  caciExpirentBientot.sort(alpha)
+  ffessmAbsents.sort(alpha)
+  ffessmDesync.sort(alpha)
 
   return {
-    caciExpires, caciExpirentBientot, ffessmAbsents, ffessmDesync,
+    caciExpires,
+    caciExpirentBientot,
+    ffessmAbsents,
+    ffessmDesync,
+    // Compteurs sur les membres actifs de la saison uniquement
+    // (dateExpiration = dateExpireLicence de la saison)
     totalAdherents: adherents.length,
     totalAssures:   adherents.filter(a => !!a.ffessmId).length,
   }
@@ -214,11 +302,10 @@ export interface AdherentDetail {
   adresseDesync: boolean; ffessmId: string | null; passager: boolean
   email: string | null; dateNaissance: string | null
   adresse: string | null; codePostal: string | null; ville: string | null
-  ffessmStatut:    string | null
-  // Adresse FFESSM déchiffrée
-  ffessmAdresse:   string | null
+  ffessmStatut:     string | null
+  ffessmAdresse:    string | null
   ffessmCodePostal: string | null
-  ffessmVille:     string | null
+  ffessmVille:      string | null
   impressions:  { id: string; printedAt: Date; status: string }[]
   attestations: { id: string; sentAt: Date; email: string | null }[]
 }
@@ -244,10 +331,10 @@ export async function getAdherentDetail(id: string): Promise<AdherentDetail | nu
     adresse:       decrypt(a.adresseEnc),
     codePostal:    decrypt(a.codePostalEnc),
     ville:         decrypt(a.villeEnc),
-    ffessmStatut:    a.validation?.statut ?? null,
-    ffessmAdresse:   decrypt(a.validation?.adresseEnc ?? null),
+    ffessmStatut:     a.validation?.statut ?? null,
+    ffessmAdresse:    decrypt(a.validation?.adresseEnc ?? null),
     ffessmCodePostal: decrypt(a.validation?.codePostalEnc ?? null),
-    ffessmVille:     decrypt(a.validation?.villeEnc ?? null),
+    ffessmVille:      decrypt(a.validation?.villeEnc ?? null),
     impressions:   a.impressions.map(i => ({ id: i.id, printedAt: i.printedAt, status: i.status })),
     attestations:  a.attestationEmails.map(e => ({ id: e.id, sentAt: e.sentAt, email: e.email })),
   }
@@ -265,7 +352,7 @@ function diffJours(dateStr: string, now: number): number {
 
 export async function togglePassager(
   adherentId: string,
-  passager: boolean
+  passager:   boolean
 ): Promise<{ success: boolean }> {
   await requireAuth()
   await prisma.adherent.update({
