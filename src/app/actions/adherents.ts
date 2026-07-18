@@ -205,17 +205,20 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   const ffessmDesync:        AlerteFFESSM[] = []
 
   // Récupérer le nombre de rappels CACI par adhérent
-  // Rappels CACI filtrés sur les mêmes adhérents (par leurs ids)
-  const adherentIds = adherents.map(a => a.id)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rappels: { adherentId: string; _count: { id: number } }[] = (prisma as any).rappelCaci
-    ? await prisma.rappelCaci.groupBy({
-        by:    ['adherentId'],
-        where: { saisonId, adherentId: { in: adherentIds } },
-        _count: { id: true },
-      })
-    : []
-  const rappelsMap = new Map(rappels.map(r => [r.adherentId, r._count.id]))
+  // Rappels CACI — filtre par saisonId uniquement (types Prisma stricts)
+  // Le filtre par adherentId se fait ensuite en mémoire via rappelsMap
+  const adherentIds = new Set(adherents.map(a => a.id))
+  const rappelsBruts = await prisma.rappelCaci.groupBy({
+    by:    ['adherentId'],
+    where: { saisonId },
+    _count: { id: true },
+  })
+  // Ne garder que les rappels des adhérents actifs de la saison filtrée
+  const rappelsMap = new Map(
+    rappelsBruts
+      .filter(r => adherentIds.has(r.adherentId))
+      .map(r => [r.adherentId, r._count.id])
+  )
 
   for (const a of adherents) {
     // ── CACI
