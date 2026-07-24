@@ -1,7 +1,14 @@
 /**
  * src/lib/label.ts
  * Génère une image étiquette Brother QL-570 via SVG → PNG (sharp)
- * Port de printing.py — canvas 696×300 px @ 300 dpi, ruban 62 mm
+ * Canvas 696×300 px @ 300 dpi, ruban 62 mm
+ *
+ * Contenu étiquette :
+ *   Ligne 1 : NOM (gras, grand)
+ *   Ligne 2 : Prénom (normal, grand)
+ *   Ligne 3 : Saison : 2025 / 2026  (moyen, gras)
+ *   Ligne 4 : Licence : XXXXXXX      (petit)
+ *   Ligne 5 : Fin CACI : JJ/MM/AAAA  (petit)
  */
 
 import sharp from 'sharp'
@@ -19,7 +26,9 @@ export type LabelWidth = keyof typeof LABEL_CANVAS
 export interface LabelData {
   nom: string
   prenom: string
-  dateExpiration: string   // JJ/MM/AAAA
+  dateExpiration: string    // JJ/MM/AAAA — calcule la saison
+  licence?: string | null   // numéro de licence FFESSM
+  caci?: string | null      // date fin CACI  JJ/MM/AAAA
   labelMm?: LabelWidth
 }
 
@@ -63,31 +72,66 @@ function buildSvg(data: LabelData): string {
   const line2 = normPrenom(data.prenom)
   const saison = saisonFromExpire(data.dateExpiration)
   const line3 = `Saison : ${saison}`
+  const line4 = data.licence ? `Licence : ${data.licence}` : null
+  const line5 = data.caci    ? `Fin CACI : ${data.caci}`   : null
 
-  const fontBig   = mm >= 62 ? 56 : mm >= 38 ? 42 : 30
-  const fontSmall = mm >= 62 ? 42 : mm >= 38 ? 32 : 24
+  // Tailles police
+  const fontBig    = mm >= 62 ? 52 : mm >= 38 ? 40 : 28   // NOM / Prénom
+  const fontMedium = mm >= 62 ? 36 : mm >= 38 ? 28 : 20   // Saison
+  const fontSmall  = mm >= 62 ? 26 : mm >= 38 ? 20 : 15   // Licence / CACI
 
   const mx    = 20
-  const myTop = 14
-  const lineH = Math.round(fontBig * 1.3)
-  const y1    = myTop + fontBig
-  const y2    = y1 + lineH
-  const y3    = y2 + Math.round(fontSmall * 1.4) + 4
+  const myTop = 10
+
+  // Positions Y (baselines)
+  const y1 = myTop + fontBig
+  const y2 = y1 + Math.round(fontBig * 1.25)
+  const y3 = y2 + Math.round(fontMedium * 1.35)
+  // Ligne 4 et 5 côte à côte ou l'une sous l'autre selon ce qui est présent
+  const y4 = y3 + Math.round(fontSmall * 1.4)
+  const y5 = y4 + Math.round(fontSmall * 1.3)
+
+  // Si les deux sont présents on les met sur la même ligne séparés par un espace
+  const bothOnOneLine = line4 !== null && line5 !== null && (y5 > h - 10)
+
+  const font = 'DejaVu Sans,Arial,Helvetica,sans-serif'
+
+  let extraLines = ''
+
+  if (bothOnOneLine) {
+    // Une seule ligne avec les deux infos séparées par  |
+    const combined = [line4, line5].filter(Boolean).join('   |   ')
+    extraLines = `
+  <text x="${mx}" y="${y4}"
+    font-family="${font}" font-size="${fontSmall}" font-weight="normal" fill="black"
+  >${escapeXml(combined!)}</text>`
+  } else {
+    if (line4) {
+      extraLines += `
+  <text x="${mx}" y="${y4}"
+    font-family="${font}" font-size="${fontSmall}" font-weight="normal" fill="black"
+  >${escapeXml(line4)}</text>`
+    }
+    if (line5) {
+      const yLine5 = line4 ? y5 : y4
+      extraLines += `
+  <text x="${mx}" y="${yLine5}"
+    font-family="${font}" font-size="${fontSmall}" font-weight="normal" fill="black"
+  >${escapeXml(line5)}</text>`
+    }
+  }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
   <rect width="${w}" height="${h}" fill="white"/>
   <text x="${mx}" y="${y1}"
-    font-family="DejaVu Sans,Arial,Helvetica,sans-serif"
-    font-size="${fontBig}" font-weight="bold" fill="black"
+    font-family="${font}" font-size="${fontBig}" font-weight="bold" fill="black"
   >${escapeXml(line1)}</text>
   <text x="${mx}" y="${y2}"
-    font-family="DejaVu Sans,Arial,Helvetica,sans-serif"
-    font-size="${fontBig}" font-weight="normal" fill="black"
+    font-family="${font}" font-size="${fontBig}" font-weight="normal" fill="black"
   >${escapeXml(line2)}</text>
   <text x="${mx}" y="${y3}"
-    font-family="DejaVu Sans,Arial,Helvetica,sans-serif"
-    font-size="${fontSmall}" font-weight="bold" fill="black"
-  >${escapeXml(line3)}</text>
+    font-family="${font}" font-size="${fontMedium}" font-weight="bold" fill="black"
+  >${escapeXml(line3)}</text>${extraLines}
   <rect x="2" y="2" width="${w - 4}" height="${h - 4}"
     fill="none" stroke="#cccccc" stroke-width="2"/>
 </svg>`

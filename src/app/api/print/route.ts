@@ -1,9 +1,7 @@
 /**
  * src/app/api/print/route.ts
- *
  * GET  /api/print  → { agentAvailable: bool }
  * POST /api/print  → impression ou fallback PNG download
- *
  * Body POST : { adherentIds: string[], force?: boolean, simulate?: boolean }
  */
 
@@ -25,7 +23,6 @@ async function isAgentAvailable(): Promise<boolean> {
   } catch { return false }
 }
 
-// Envoie le PNG base64 + métadonnées à l'agent Windows
 async function sendToAgent(
   nom: string, prenom: string, expire: string, pngBuffer: Buffer
 ): Promise<void> {
@@ -76,9 +73,18 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(adherentIds) || adherentIds.length === 0)
     return NextResponse.json({ error: 'Aucun adhérent sélectionné' }, { status: 400 })
 
+  // Charge les adhérents avec licence + caci
   const adherents = await prisma.adherent.findMany({
     where: { id: { in: adherentIds } },
-    select: { id: true, nom: true, prenom: true, dateExpiration: true, saisonId: true },
+    select: {
+      id: true,
+      nom: true,
+      prenom: true,
+      dateExpiration: true,
+      saisonId: true,
+      licence: true,
+      caci: true,
+    },
   })
   if (adherents.length === 0)
     return NextResponse.json({ error: 'Adhérents introuvables' }, { status: 404 })
@@ -99,10 +105,12 @@ export async function POST(req: NextRequest) {
       }
     }
     const labelData: LabelData = {
-      nom: adherent.nom,
-      prenom: adherent.prenom,
+      nom:            adherent.nom,
+      prenom:         adherent.prenom,
       dateExpiration: adherent.dateExpiration ?? '31/12/2025',
-      labelMm: 62 as LabelWidth,
+      licence:        adherent.licence ?? null,
+      caci:           adherent.caci    ?? null,
+      labelMm:        62 as LabelWidth,
     }
     const result = await generateLabelPng(labelData)
     jobs.push({ adherent, ...result })
@@ -148,7 +156,8 @@ export async function POST(req: NextRequest) {
     for (const job of jobs) {
       try {
         await sendToAgent(
-          job.adherent.nom, job.adherent.prenom,
+          job.adherent.nom,
+          job.adherent.prenom,
           job.adherent.dateExpiration ?? '31/12/2025',
           job.pngBuffer
         )
