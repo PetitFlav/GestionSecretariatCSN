@@ -1,8 +1,14 @@
 /**
  * src/lib/label.ts
  * Génère une image étiquette Brother QL-570 via @napi-rs/canvas
- * Rendu texte natif avec fonts chargées depuis public/fonts/
- * Canvas 696×300 px @ 300 dpi, ruban 62 mm
+ * Layout :
+ *   NOM (gras, grand)
+ *   Prénom (normal, grand)
+ *   [espace]
+ *   Saison : 2025 / 2026 (gras, moyen)
+ *   [espace]
+ *   Licence : XXXXXXX (petit)
+ *   Fin CACI : JJ/MM/AAAA (petit)
  */
 
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas'
@@ -41,11 +47,8 @@ function loadFonts() {
   if (fontsLoaded) return
 
   const candidates = [
-    // public/fonts/ dans le repo (Vercel + Codespaces)
     path.join(process.cwd(), 'public', 'fonts', 'DejaVuSans.ttf'),
-    // Linux système
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-    // Windows
     'C:\\Windows\\Fonts\\arial.ttf',
   ]
   const candidatesBold = [
@@ -101,47 +104,46 @@ async function renderCanvas(data: LabelData): Promise<Buffer> {
   // Fond blanc
   ctx.fillStyle = 'white'
   ctx.fillRect(0, 0, w, h)
-
-  // Tailles police
-  const fontBig    = mm >= 62 ? 52 : mm >= 38 ? 40 : 28
-  const fontMedium = mm >= 62 ? 36 : mm >= 38 ? 28 : 20
-  const fontSmall  = mm >= 62 ? 26 : mm >= 38 ? 20 : 15
-
-  const mx    = 20
-  const myTop = 10
-
   ctx.fillStyle = 'black'
   ctx.textBaseline = 'top'
 
-  // Ligne 1 — NOM (gras)
+  // Tailles police
+  const fontBig    = mm >= 62 ? 56 : mm >= 38 ? 42 : 30  // NOM + Prénom
+  const fontMedium = mm >= 62 ? 38 : mm >= 38 ? 30 : 22  // Saison
+  const fontSmall  = mm >= 62 ? 24 : mm >= 38 ? 19 : 14  // Licence + CACI
+
+  // Espacement
+  const mx      = 20
+  const myTop   = 6
+  const gap     = mm >= 62 ? 10 : 6   // espace entre blocs
+
+  // Ligne 1 — NOM
   ctx.font = `bold ${fontBig}px LabelFontBold, LabelFont, Arial, sans-serif`
   ctx.fillText(normNom(data.nom), mx, myTop)
 
   // Ligne 2 — Prénom
-  const y2 = myTop + Math.round(fontBig * 1.25)
+  const y2 = myTop + Math.round(fontBig * 1.2)
   ctx.font = `${fontBig}px LabelFont, Arial, sans-serif`
   ctx.fillText(normPrenom(data.prenom), mx, y2)
 
-  // Ligne 3 — Saison (gras)
-  const y3 = y2 + Math.round(fontMedium * 1.35)
+  // Ligne 3 — Saison (après espace)
+  const y3 = y2 + Math.round(fontBig * 1.1) + gap
   ctx.font = `bold ${fontMedium}px LabelFontBold, LabelFont, Arial, sans-serif`
   ctx.fillText(`Saison : ${saisonFromExpire(data.dateExpiration)}`, mx, y3)
 
-  // Ligne 4 — Licence
+  // Lignes 4 + 5 — Licence + CACI (après espace)
   ctx.font = `${fontSmall}px LabelFont, Arial, sans-serif`
-  let yNext = y3 + Math.round(fontMedium * 1.3)
+  let yNext = y3 + Math.round(fontMedium * 1.2) + gap
 
   if (data.licence) {
     ctx.fillText(`Licence : ${data.licence}`, mx, yNext)
-    yNext += Math.round(fontSmall * 1.35)
+    yNext += Math.round(fontSmall * 1.4)
   }
-
-  // Ligne 5 — CACI
   if (data.caci) {
     ctx.fillText(`Fin CACI : ${data.caci}`, mx, yNext)
   }
 
-  // Bordure
+  // Bordure légère
   ctx.strokeStyle = '#cccccc'
   ctx.lineWidth   = 2
   ctx.strokeRect(2, 2, w - 4, h - 4)
@@ -161,16 +163,15 @@ export async function generateLabelPng(data: LabelData): Promise<LabelResult> {
   return { pngBuffer, checksum, filename }
 }
 
-// Compat preview SVG — on retourne un SVG simple pour la preview
 export function generateLabelSvg(data: LabelData): string {
   const mm = (data.labelMm ?? 62) as LabelWidth
   const { w, h } = LABEL_CANVAS[mm]
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
   <rect width="${w}" height="${h}" fill="white"/>
-  <text x="20" y="60" font-family="Arial" font-size="52" font-weight="bold" fill="black">${data.nom.toUpperCase()}</text>
-  <text x="20" y="125" font-family="Arial" font-size="52" fill="black">${data.prenom}</text>
-  <text x="20" y="175" font-family="Arial" font-size="36" font-weight="bold" fill="black">Saison : ${saisonFromExpire(data.dateExpiration)}</text>
-  ${data.licence ? `<text x="20" y="210" font-family="Arial" font-size="26" fill="black">Licence : ${data.licence}</text>` : ''}
-  ${data.caci    ? `<text x="20" y="245" font-family="Arial" font-size="26" fill="black">Fin CACI : ${data.caci}</text>` : ''}
+  <text x="20" y="60" font-family="Arial" font-size="56" font-weight="bold" fill="black">${data.nom.toUpperCase()}</text>
+  <text x="20" y="130" font-family="Arial" font-size="56" fill="black">${data.prenom}</text>
+  <text x="20" y="192" font-family="Arial" font-size="38" font-weight="bold" fill="black">Saison : ${saisonFromExpire(data.dateExpiration)}</text>
+  ${data.licence ? `<text x="20" y="235" font-family="Arial" font-size="24" fill="black">Licence : ${data.licence}</text>` : ''}
+  ${data.caci    ? `<text x="20" y="265" font-family="Arial" font-size="24" fill="black">Fin CACI : ${data.caci}</text>` : ''}
 </svg>`
 }
