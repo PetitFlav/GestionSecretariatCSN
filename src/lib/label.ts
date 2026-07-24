@@ -91,9 +91,9 @@ async function renderCanvas(data: LabelData): Promise<Buffer> {
   ctx.textBaseline = 'top'
 
   // ── Tailles police calées sur 449×296 ──────────────────────────────────────
-  const fontBig    = mm >= 62 ? 44 : mm >= 38 ? 38 : 28   // NOM + Prénom
-  const fontMedium = mm >= 62 ? 30 : mm >= 38 ? 26 : 20   // Saison
-  const fontSmall  = mm >= 62 ? 18 : mm >= 38 ? 16 : 12   // Licence + CACI
+  const fontBig    = mm >= 62 ? 40 : mm >= 38 ? 38 : 28   // NOM + Prénom
+  const fontMedium = mm >= 62 ? 28 : mm >= 38 ? 26 : 20   // Saison
+  const fontSmall  = mm >= 62 ? 17 : mm >= 38 ? 16 : 12   // Licence + CACI
 
   const mx      = 14
   const marginV = 6
@@ -103,7 +103,7 @@ async function renderCanvas(data: LabelData): Promise<Buffer> {
   ctx.font = `bold ${fontBig}px LabelFontBold, LabelFont, Arial, sans-serif`
   ctx.fillText(normNom(data.nom), mx, y1)
 
-  const y2 = y1 + Math.round(fontBig * 1.15)
+  const y2 = y1 + Math.round(fontBig * 1.10)
   ctx.font = `${fontBig}px LabelFont, Arial, sans-serif`
   ctx.fillText(normPrenom(data.prenom), mx, y2)
 
