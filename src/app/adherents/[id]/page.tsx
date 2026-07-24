@@ -48,12 +48,7 @@ export default async function AdherentDetailPage({ params }: Props) {
             </p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            <BoutonEtiquette
-              adherentId={a.id}
-              nom={a.nom}
-              prenom={a.prenom}
-              dateExpiration={a.dateExpiration}
-            />
+            <BoutonEtiquette adherentId={a.id} />
             <BoutonAttestation adherentId={a.id} />
           </div>
         </div>
