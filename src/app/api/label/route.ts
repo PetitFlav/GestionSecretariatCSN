@@ -75,5 +75,7 @@ export async function GET(req: NextRequest) {
     nom:        adherent.nom,
     prenom:     adherent.prenom,
     expire:     adherent.dateExpiration ?? '31/12/2025',
+    licence:    adherent.licence ?? null,   // ← ajouter
+    caci:       adherent.caci    ?? null,   // ← ajouter
   })
 }
