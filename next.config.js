@@ -10,6 +10,10 @@ const nextConfig = {
       ],
     },
   },
+  webpack: (config) => {
+    config.externals.push('@napi-rs/canvas')
+    return config
+  },
 }
 
 module.exports = nextConfig
