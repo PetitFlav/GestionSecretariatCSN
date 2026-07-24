@@ -1,14 +1,14 @@
 /**
  * src/lib/label.ts
- * Génère une image étiquette Brother QL-570 via SVG → PNG (sharp)
- * Utilise DejaVu Sans embarqué en base64 pour garantir le rendu
- * sur tous les environnements (Vercel, Windows, Codespaces)
+ * Génère une image étiquette Brother QL-570 via @napi-rs/canvas
+ * Rendu texte natif avec fonts chargées depuis public/fonts/
+ * Canvas 696×300 px @ 300 dpi, ruban 62 mm
  */
 
-import sharp from 'sharp'
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas'
 import crypto from 'crypto'
-import fs from 'fs'
 import path from 'path'
+import fs from 'fs'
 
 export const LABEL_CANVAS = {
   62: { w: 696, h: 300 },
@@ -22,7 +22,7 @@ export type LabelWidth = keyof typeof LABEL_CANVAS
 export interface LabelData {
   nom: string
   prenom: string
-  dateExpiration: string    // JJ/MM/AAAA
+  dateExpiration: string
   licence?: string | null
   caci?: string | null
   labelMm?: LabelWidth
@@ -34,32 +34,40 @@ export interface LabelResult {
   filename: string
 }
 
-// ── Chargement des polices en base64 ─────────────────────────────────────────
-// Les fichiers .ttf sont dans public/fonts/ (commités dans le repo)
-function loadFontBase64(filename: string): string {
+// ── Chargement des fonts ──────────────────────────────────────────────────────
+let fontsLoaded = false
+
+function loadFonts() {
+  if (fontsLoaded) return
+
   const candidates = [
-    path.join(process.cwd(), 'public', 'fonts', filename),
-    path.join('/usr/share/fonts/truetype/dejavu', filename),
-    path.join('C:\\Windows\\Fonts', filename === 'DejaVuSans.ttf' ? 'arial.ttf' : 'arialbd.ttf'),
+    // public/fonts/ dans le repo (Vercel + Codespaces)
+    path.join(process.cwd(), 'public', 'fonts', 'DejaVuSans.ttf'),
+    // Linux système
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    // Windows
+    'C:\\Windows\\Fonts\\arial.ttf',
   ]
+  const candidatesBold = [
+    path.join(process.cwd(), 'public', 'fonts', 'DejaVuSans-Bold.ttf'),
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    'C:\\Windows\\Fonts\\arialbd.ttf',
+  ]
+
   for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) {
-        return fs.readFileSync(p).toString('base64')
-      }
-    } catch {}
+    if (fs.existsSync(p)) {
+      GlobalFonts.registerFromPath(p, 'LabelFont')
+      break
+    }
   }
-  return ''
-}
+  for (const p of candidatesBold) {
+    if (fs.existsSync(p)) {
+      GlobalFonts.registerFromPath(p, 'LabelFontBold')
+      break
+    }
+  }
 
-// Cache en mémoire (chargé une seule fois au démarrage)
-let _fontRegular = ''
-let _fontBold    = ''
-
-function getFonts(): { regular: string; bold: string } {
-  if (!_fontRegular) _fontRegular = loadFontBase64('DejaVuSans.ttf')
-  if (!_fontBold)    _fontBold    = loadFontBase64('DejaVuSans-Bold.ttf')
-  return { regular: _fontRegular, bold: _fontBold }
+  fontsLoaded = true
 }
 
 // ── Utilitaires ───────────────────────────────────────────────────────────────
@@ -80,26 +88,19 @@ function normPrenom(prenom: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-}
+// ── Rendu canvas ──────────────────────────────────────────────────────────────
+async function renderCanvas(data: LabelData): Promise<Buffer> {
+  loadFonts()
 
-// ── Construction SVG avec font embarquée ──────────────────────────────────────
-function buildSvg(data: LabelData): string {
   const mm = (data.labelMm ?? 62) as LabelWidth
   const { w, h } = LABEL_CANVAS[mm]
 
-  const line1 = normNom(data.nom)
-  const line2 = normPrenom(data.prenom)
-  const saison = saisonFromExpire(data.dateExpiration)
-  const line3  = `Saison : ${saison}`
-  const line4  = data.licence ? `Licence : ${data.licence}` : null
-  const line5  = data.caci    ? `Fin CACI : ${data.caci}`   : null
+  const canvas = createCanvas(w, h)
+  const ctx    = canvas.getContext('2d')
+
+  // Fond blanc
+  ctx.fillStyle = 'white'
+  ctx.fillRect(0, 0, w, h)
 
   // Tailles police
   const fontBig    = mm >= 62 ? 52 : mm >= 38 ? 40 : 28
@@ -108,69 +109,49 @@ function buildSvg(data: LabelData): string {
 
   const mx    = 20
   const myTop = 10
-  const y1    = myTop + fontBig
-  const y2    = y1 + Math.round(fontBig * 1.25)
-  const y3    = y2 + Math.round(fontMedium * 1.35)
-  const y4    = y3 + Math.round(fontSmall * 1.4)
-  const y5    = y4 + Math.round(fontSmall * 1.3)
 
-  // Police embarquée via base64 dans @font-face
-  const { regular, bold } = getFonts()
+  ctx.fillStyle = 'black'
+  ctx.textBaseline = 'top'
 
-  const fontFaceStyle = regular ? `
-  <defs>
-    <style>
-      @font-face {
-        font-family: 'DejaVuSans';
-        font-weight: normal;
-        src: url('data:font/truetype;base64,${regular}');
-      }
-      @font-face {
-        font-family: 'DejaVuSans';
-        font-weight: bold;
-        src: url('data:font/truetype;base64,${bold || regular}');
-      }
-    </style>
-  </defs>` : ''
+  // Ligne 1 — NOM (gras)
+  ctx.font = `bold ${fontBig}px LabelFontBold, LabelFont, Arial, sans-serif`
+  ctx.fillText(normNom(data.nom), mx, myTop)
 
-  const fontFamily = regular ? 'DejaVuSans' : 'Arial,Helvetica,sans-serif'
+  // Ligne 2 — Prénom
+  const y2 = myTop + Math.round(fontBig * 1.25)
+  ctx.font = `${fontBig}px LabelFont, Arial, sans-serif`
+  ctx.fillText(normPrenom(data.prenom), mx, y2)
 
-  // Lignes 4 et 5
-  let extraLines = ''
-  const bothOnOneLine = line4 !== null && line5 !== null && y5 > h - 10
-  if (bothOnOneLine) {
-    const combined = [line4, line5].filter(Boolean).join('   |   ')
-    extraLines = `
-  <text x="${mx}" y="${y4}" font-family="${fontFamily}" font-size="${fontSmall}" font-weight="normal" fill="black">${escapeXml(combined!)}</text>`
-  } else {
-    if (line4) extraLines += `
-  <text x="${mx}" y="${y4}" font-family="${fontFamily}" font-size="${fontSmall}" font-weight="normal" fill="black">${escapeXml(line4)}</text>`
-    if (line5) {
-      const yLine5 = line4 ? y5 : y4
-      extraLines += `
-  <text x="${mx}" y="${yLine5}" font-family="${fontFamily}" font-size="${fontSmall}" font-weight="normal" fill="black">${escapeXml(line5)}</text>`
-    }
+  // Ligne 3 — Saison (gras)
+  const y3 = y2 + Math.round(fontMedium * 1.35)
+  ctx.font = `bold ${fontMedium}px LabelFontBold, LabelFont, Arial, sans-serif`
+  ctx.fillText(`Saison : ${saisonFromExpire(data.dateExpiration)}`, mx, y3)
+
+  // Ligne 4 — Licence
+  ctx.font = `${fontSmall}px LabelFont, Arial, sans-serif`
+  let yNext = y3 + Math.round(fontMedium * 1.3)
+
+  if (data.licence) {
+    ctx.fillText(`Licence : ${data.licence}`, mx, yNext)
+    yNext += Math.round(fontSmall * 1.35)
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${fontFaceStyle}
-  <rect width="${w}" height="${h}" fill="white"/>
-  <text x="${mx}" y="${y1}" font-family="${fontFamily}" font-size="${fontBig}" font-weight="bold" fill="black">${escapeXml(line1)}</text>
-  <text x="${mx}" y="${y2}" font-family="${fontFamily}" font-size="${fontBig}" font-weight="normal" fill="black">${escapeXml(line2)}</text>
-  <text x="${mx}" y="${y3}" font-family="${fontFamily}" font-size="${fontMedium}" font-weight="bold" fill="black">${escapeXml(line3)}</text>${extraLines}
-  <rect x="2" y="2" width="${w - 4}" height="${h - 4}" fill="none" stroke="#cccccc" stroke-width="2"/>
-</svg>`
+  // Ligne 5 — CACI
+  if (data.caci) {
+    ctx.fillText(`Fin CACI : ${data.caci}`, mx, yNext)
+  }
+
+  // Bordure
+  ctx.strokeStyle = '#cccccc'
+  ctx.lineWidth   = 2
+  ctx.strokeRect(2, 2, w - 4, h - 4)
+
+  return canvas.toBuffer('image/png')
 }
 
-// ── Export principal ──────────────────────────────────────────────────────────
+// ── Exports ───────────────────────────────────────────────────────────────────
 export async function generateLabelPng(data: LabelData): Promise<LabelResult> {
-  const mm = (data.labelMm ?? 62) as LabelWidth
-  const { w, h } = LABEL_CANVAS[mm]
-
-  const svg = buildSvg(data)
-  const pngBuffer = await sharp(Buffer.from(svg, 'utf-8'))
-    .resize(w, h, { fit: 'fill' })
-    .png({ compressionLevel: 6 })
-    .toBuffer()
+  const pngBuffer = await renderCanvas(data)
 
   const checksum = crypto.createHash('sha1').update(pngBuffer).digest('hex')
   const safeName = `${normNom(data.nom)}_${normPrenom(data.prenom)}`
@@ -180,6 +161,16 @@ export async function generateLabelPng(data: LabelData): Promise<LabelResult> {
   return { pngBuffer, checksum, filename }
 }
 
+// Compat preview SVG — on retourne un SVG simple pour la preview
 export function generateLabelSvg(data: LabelData): string {
-  return buildSvg(data)
+  const mm = (data.labelMm ?? 62) as LabelWidth
+  const { w, h } = LABEL_CANVAS[mm]
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+  <rect width="${w}" height="${h}" fill="white"/>
+  <text x="20" y="60" font-family="Arial" font-size="52" font-weight="bold" fill="black">${data.nom.toUpperCase()}</text>
+  <text x="20" y="125" font-family="Arial" font-size="52" fill="black">${data.prenom}</text>
+  <text x="20" y="175" font-family="Arial" font-size="36" font-weight="bold" fill="black">Saison : ${saisonFromExpire(data.dateExpiration)}</text>
+  ${data.licence ? `<text x="20" y="210" font-family="Arial" font-size="26" fill="black">Licence : ${data.licence}</text>` : ''}
+  ${data.caci    ? `<text x="20" y="245" font-family="Arial" font-size="26" fill="black">Fin CACI : ${data.caci}</text>` : ''}
+</svg>`
 }
