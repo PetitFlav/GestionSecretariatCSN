@@ -1,6 +1,7 @@
 /**
  * src/lib/label.ts
- * Layout étiquette Brother QL-570 62mm (696×300px)
+ * Génère une image étiquette Brother QL-570 via @napi-rs/canvas
+ * Canvas 449×296 px = dimensions réelles driver Brother Windows
  *
  *  ┌──────────────────────────────────────┐
  *  │ NOM                        (haut)    │
@@ -19,7 +20,7 @@ import path from 'path'
 import fs from 'fs'
 
 export const LABEL_CANVAS = {
-  62: { w: 696, h: 300 },
+  62: { w: 449, h: 296 },   // dimensions réelles driver Brother Windows
   38: { w: 413, h: 300 },
   29: { w: 306, h: 300 },
   12: { w: 118, h: 300 },
@@ -69,7 +70,7 @@ export function saisonFromExpire(expire: string): string {
   return `${year - 1} / ${year}`
 }
 
-function normNom(nom: string)    { return nom.trim().toUpperCase() }
+function normNom(nom: string) { return nom.trim().toUpperCase() }
 function normPrenom(prenom: string) {
   const s = prenom.trim().toLowerCase()
   return s.charAt(0).toUpperCase() + s.slice(1)
@@ -89,13 +90,13 @@ async function renderCanvas(data: LabelData): Promise<Buffer> {
   ctx.fillStyle    = 'black'
   ctx.textBaseline = 'top'
 
-  // ── Tailles police ──────────────────────────────────────────────────────────
-  const fontBig    = mm >= 62 ? 68 : mm >= 38 ? 50 : 34   // NOM + Prénom
-  const fontMedium = mm >= 62 ? 46 : mm >= 38 ? 35 : 24   // Saison
-  const fontSmall  = mm >= 62 ? 28 : mm >= 38 ? 22 : 15   // Licence + CACI
+  // ── Tailles police calées sur 449×296 ──────────────────────────────────────
+  const fontBig    = mm >= 62 ? 44 : mm >= 38 ? 38 : 28   // NOM + Prénom
+  const fontMedium = mm >= 62 ? 30 : mm >= 38 ? 26 : 20   // Saison
+  const fontSmall  = mm >= 62 ? 18 : mm >= 38 ? 16 : 12   // Licence + CACI
 
-  const mx      = 20
-  const marginV = 8   // marge verticale haut/bas
+  const mx      = 14
+  const marginV = 6
 
   // ── BLOC HAUT : NOM + Prénom ───────────────────────────────────────────────
   const y1 = marginV
@@ -106,21 +107,18 @@ async function renderCanvas(data: LabelData): Promise<Buffer> {
   ctx.font = `${fontBig}px LabelFont, Arial, sans-serif`
   ctx.fillText(normPrenom(data.prenom), mx, y2)
 
-  // ── BLOC MILIEU : Saison ───────────────────────────────────────────────────
-  // Centré verticalement dans l'espace restant entre Prénom et bas
-  const blockTopEnd    = y2 + Math.round(fontBig * 1.1)
-  const blockBottomStart = h - marginV - Math.round(fontSmall * 1.35) * 2
-  const saisonY = Math.round((blockTopEnd + blockBottomStart - fontMedium) / 2)
+  // ── BLOC MILIEU : Saison centré verticalement ──────────────────────────────
+  const blockTopEnd      = y2 + Math.round(fontBig * 1.1)
+  const lineSmallH       = Math.round(fontSmall * 1.35)
+  const nbLines          = (data.licence ? 1 : 0) + (data.caci ? 1 : 0)
+  const blockBottomStart = h - marginV - (nbLines * lineSmallH)
+  const saisonY          = Math.round((blockTopEnd + blockBottomStart - fontMedium) / 2)
 
   ctx.font = `bold ${fontMedium}px LabelFontBold, LabelFont, Arial, sans-serif`
   ctx.fillText(`Saison : ${saisonFromExpire(data.dateExpiration)}`, mx, saisonY)
 
-  // ── BLOC BAS : Licence + CACI (ancrés en bas) ─────────────────────────────
-  const lineSmallH = Math.round(fontSmall * 1.35)
-  const nbLines    = (data.licence ? 1 : 0) + (data.caci ? 1 : 0)
-  const blockH     = nbLines * lineSmallH
-  let yBottom      = h - marginV - blockH
-
+  // ── BLOC BAS : Licence + CACI ancrés en bas ───────────────────────────────
+  let yBottom = h - marginV - (nbLines * lineSmallH)
   ctx.font = `${fontSmall}px LabelFont, Arial, sans-serif`
 
   if (data.licence) {
@@ -133,8 +131,8 @@ async function renderCanvas(data: LabelData): Promise<Buffer> {
 
   // Bordure
   ctx.strokeStyle = '#cccccc'
-  ctx.lineWidth   = 2
-  ctx.strokeRect(2, 2, w - 4, h - 4)
+  ctx.lineWidth   = 1.5
+  ctx.strokeRect(1, 1, w - 2, h - 2)
 
   return canvas.toBuffer('image/png')
 }
@@ -151,10 +149,10 @@ export function generateLabelSvg(data: LabelData): string {
   const { w, h } = LABEL_CANVAS[mm]
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
   <rect width="${w}" height="${h}" fill="white"/>
-  <text x="20" y="8"   font-family="Arial" font-size="68" font-weight="bold" fill="black">${data.nom.toUpperCase()}</text>
-  <text x="20" y="86"  font-family="Arial" font-size="68" fill="black">${data.prenom}</text>
-  <text x="20" y="178" font-family="Arial" font-size="46" font-weight="bold" fill="black">Saison : ${saisonFromExpire(data.dateExpiration)}</text>
-  ${data.licence ? `<text x="20" y="235" font-family="Arial" font-size="28" fill="black">Licence : ${data.licence}</text>` : ''}
-  ${data.caci    ? `<text x="20" y="264" font-family="Arial" font-size="28" fill="black">Fin CACI : ${data.caci}</text>` : ''}
+  <text x="14" y="6"   font-family="Arial" font-size="44" font-weight="bold" fill="black">${data.nom.toUpperCase()}</text>
+  <text x="14" y="57"  font-family="Arial" font-size="44" fill="black">${data.prenom}</text>
+  <text x="14" y="148" font-family="Arial" font-size="30" font-weight="bold" fill="black">Saison : ${saisonFromExpire(data.dateExpiration)}</text>
+  ${data.licence ? `<text x="14" y="234" font-family="Arial" font-size="18" fill="black">Licence : ${data.licence}</text>` : ''}
+  ${data.caci    ? `<text x="14" y="258" font-family="Arial" font-size="18" fill="black">Fin CACI : ${data.caci}</text>` : ''}
 </svg>`
 }
