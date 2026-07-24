@@ -20,7 +20,7 @@ import path from 'path'
 import fs from 'fs'
 
 export const LABEL_CANVAS = {
-  62: { w: 449, h: 245 },   // dimensions réelles driver Brother Windows
+  62: { w: 449, h: 230 },   // dimensions réelles driver Brother Windows
   38: { w: 413, h: 300 },
   29: { w: 306, h: 300 },
   12: { w: 118, h: 300 },
