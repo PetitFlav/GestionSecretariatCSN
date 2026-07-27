@@ -43,18 +43,18 @@ def print_png(filepath: str, printer_name: str = "Brother QL-570") -> None:
     hDC.CreatePrinterDC(printer_name)
 
     try:
-        # Dimensions physiques de la page (pixels imprimante)
-        pw = hDC.GetDeviceCaps(110)   # HORZRES
-        ph = hDC.GetDeviceCaps(111)   # VERTRES
+        # Dimensions de la page imprimante
+        pw = hDC.GetDeviceCaps(110)  # HORZRES
+        ph = hDC.GetDeviceCaps(111)  # VERTRES
 
-        # Redimensionne l'image pour tenir dans la page en gardant le ratio
+        # Redimensionne en gardant le ratio
         img_w, img_h = img.size
         ratio = min(pw / img_w, ph / img_h)
         new_w = int(img_w * ratio)
         new_h = int(img_h * ratio)
 
         # Centre sur la page
-        x_off = (pw - new_w) // 2
+        x_off = 0
         y_off = (ph - new_h) // 2
 
         hDC.StartDoc(os.path.basename(filepath))
