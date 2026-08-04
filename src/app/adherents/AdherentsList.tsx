@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { getAdherentsEtiquettes, AdherentEtiquette, AdherentFilters } from '@/app/actions/adherents'
+import { getAdherentsEtiquettes, getSectionsDisponibles, AdherentEtiquette, AdherentFilters } from '@/app/actions/adherents'
 import { PrintSelectionButton } from '@/components/PrintSelectionButton'
 
 interface Props { saisonId: string; saisonLabel: string }
@@ -44,6 +44,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
   const [page, setPage]             = useState(1)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [filters, setFilters]       = useState<AdherentFilters>({ search: '', imprime: '' })
+  const [sectionsDispo, setSectionsDispo] = useState<string[]>([])
 
   const load = useCallback((f: AdherentFilters, p: number) => {
     startTransition(async () => {
@@ -56,7 +57,10 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
     })
   }, [saisonId])
 
-  useEffect(() => { load(filters, 1) }, []) // eslint-disable-line
+  useEffect(() => {
+    load(filters, 1)
+    getSectionsDisponibles(saisonId).then(setSectionsDispo)
+  }, []) // eslint-disable-line
 
   function applyFilters(f: AdherentFilters) { setFilters(f); load(f, 1) }
 
@@ -108,6 +112,24 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
             <option value="non">Non imprimés</option>
             <option value="oui">Déjà imprimés</option>
           </select>
+
+          {sectionsDispo.length > 0 && (
+            <select
+              value={filters.section ?? ''}
+              onChange={e => applyFilters({ ...filters, section: e.target.value })}
+              className="px-3 py-2 text-[12px] rounded-lg outline-none"
+              style={{
+                border: '0.5px solid var(--csn-border-strong)',
+                background: 'var(--csn-cream)',
+                color: 'var(--csn-navy)',
+              }}
+            >
+              <option value="">Toutes sections</option>
+              {sectionsDispo.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Barre actions */}
@@ -173,6 +195,9 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                 <th className="px-3 py-2.5 text-left text-[11px] text-slate-500 font-medium hidden md:table-cell">
                   Licence
                 </th>
+                <th className="px-3 py-2.5 text-left text-[11px] text-slate-500 font-medium hidden md:table-cell">
+                  Section
+                </th>
                 <th className="px-3 py-2.5 text-left text-[11px] text-slate-500 font-medium hidden lg:table-cell">
                   Expir. licence
                 </th>
@@ -183,7 +208,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
             <tbody>
               {adherents.length === 0 && !isPending && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-[13px] text-slate-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-[13px] text-slate-400">
                     Aucun adhérent trouvé
                   </td>
                 </tr>
@@ -237,6 +262,11 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                     {/* Licence */}
                     <td className="px-3 py-2.5 text-[12px] text-slate-400 hidden md:table-cell">
                       {a.licence ?? '—'}
+                    </td>
+
+                    {/* Section */}
+                    <td className="px-3 py-2.5 text-[12px] text-slate-400 hidden md:table-cell">
+                      {a.section ?? '—'}
                     </td>
 
                     {/* Date expiration licence */}

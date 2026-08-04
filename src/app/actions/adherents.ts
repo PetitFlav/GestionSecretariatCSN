@@ -12,6 +12,7 @@ export interface AdherentFilters {
   search?:      string
   imprime?:     'oui' | 'non' | ''
   attestation?: 'oui' | 'non' | ''
+  section?:     string    // libellé canonique exact, ou '' = toutes
   page?:        number
   perPage?:     number
 }
@@ -26,6 +27,7 @@ export interface AdherentEtiquette {
   dateExpiration: string | null
   caci:           string | null
   imprime:        boolean
+  section:        string | null
 }
 
 /**
@@ -65,6 +67,7 @@ export async function getAdherentsEtiquettes(
   }
   if (filters.imprime === 'oui') where.impressions = { some: { status: 'PRINTED' } }
   if (filters.imprime === 'non') where.impressions = { none: { status: 'PRINTED' } }
+  if (filters.section) where.section = filters.section
 
   const [total, rows] = await Promise.all([
     prisma.adherent.count({ where }),
@@ -79,9 +82,30 @@ export async function getAdherentsEtiquettes(
       id: a.id, nom: a.nom, prenom: a.prenom,
       licence: a.licence, dateExpiration: a.dateExpiration,
       caci: a.caci, imprime: a.impressions.length > 0,
+      section: a.section,
     })),
     total, page, totalPages: Math.ceil(total / perPage),
   }
+}
+
+/**
+ * Liste des sections distinctes présentes en base pour la saison (membres actifs).
+ * Alimente le menu déroulant de filtre — renvoie les libellés entiers.
+ */
+export async function getSectionsDisponibles(saisonId: string): Promise<string[]> {
+  await requireAuth()
+  const dateExpireLicence = await getSaisonDateExpire(saisonId)
+  const rows = await prisma.adherent.findMany({
+    where: {
+      saisonId,
+      ...(dateExpireLicence ? { dateExpiration: dateExpireLicence } : {}),
+      section: { not: null },
+    },
+    distinct: ['section'],
+    select:   { section: true },
+    orderBy:  { section: 'asc' },
+  })
+  return rows.map(r => r.section!).filter(Boolean)
 }
 
 // ── Attestations ──────────────────────────────────────────────────────────────

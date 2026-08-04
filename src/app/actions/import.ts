@@ -5,17 +5,19 @@ import { encrypt, decrypt, keysMatch } from '@/lib/crypto'
 import { parseMembres } from '@/lib/parsers/membres'
 import { parsePaiements } from '@/lib/parsers/paiements'
 import { parseFFESSM, adressesDifferentes } from '@/lib/parsers/ffessm'
+import { parseFormulaire, FormulaireRow } from '@/lib/parsers/formulaire'
 import { requireAuth } from '@/lib/session'
 
 export interface ImportResult {
   success: boolean
   error?: string
   stats?: {
-    crees:        number
-    misAJour:     number
-    ignores:      number
-    desyncsFFESSM: number
-    erreurs:      string[]
+    crees:                number
+    misAJour:             number
+    ignores:              number
+    desyncsFFESSM:        number
+    sectionsNonAssociees: number
+    erreurs:              string[]
   }
 }
 
@@ -26,10 +28,11 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
     return { success: false, error: 'Non authentifié' }
   }
 
-  const saisonId     = formData.get('saisonId') as string
-  const membreFile   = formData.get('membres') as File | null
-  const paiementFile = formData.get('paiements') as File | null
-  const ffessmFile   = formData.get('ffessm') as File | null
+  const saisonId       = formData.get('saisonId') as string
+  const membreFile     = formData.get('membres') as File | null
+  const paiementFile   = formData.get('paiements') as File | null
+  const ffessmFile     = formData.get('ffessm') as File | null
+  const formulaireFile = formData.get('formulaire') as File | null
 
   if (!saisonId)     return { success: false, error: 'Saison non sélectionnée' }
   if (!membreFile)   return { success: false, error: 'Fichier Membres obligatoire' }
@@ -40,7 +43,7 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
   if (!saison) return { success: false, error: 'Saison introuvable' }
 
   const allErrors: string[] = []
-  let crees = 0, misAJour = 0, ignores = 0, desyncsFFESSM = 0
+  let crees = 0, misAJour = 0, ignores = 0, desyncsFFESSM = 0, sectionsNonAssociees = 0
 
   // ── 1. Parser les fichiers ────────────────────────────────────────────────
 
@@ -60,6 +63,16 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
     ffessmMap = ffessm
     allErrors.push(...ffessmErrors)
   }
+
+  // Fichier formulaire d'adhésions (sections) — FACULTATIF. Jointure par nom seul.
+  let formulaireMap = new Map<string, FormulaireRow>()
+  if (formulaireFile) {
+    const formulaireBuffer = await formulaireFile.arrayBuffer()
+    const { formulaire, errors: formErrors } = parseFormulaire(formulaireBuffer)
+    formulaireMap = formulaire
+    allErrors.push(...formErrors)
+  }
+  const formulaireKeysMatched = new Set<string>()
 
   if (membres.length === 0) {
     return { success: false, error: 'Aucun membre trouvé dans le fichier Membres' }
@@ -84,6 +97,23 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
           if (keysMatch(membre.key, k)) { ffessm = v; break }
         }
       }
+
+      // Jointure avec le formulaire d'adhésions (section) — nom uniquement
+      let matchedFormKey: string | undefined
+      let formulaire = formulaireMap.get(membre.key)
+      if (formulaire) {
+        matchedFormKey = membre.key
+      } else {
+        for (const [k, v] of formulaireMap.entries()) {
+          if (keysMatch(membre.key, k)) { formulaire = v; matchedFormKey = k; break }
+        }
+      }
+      if (matchedFormKey) formulaireKeysMatched.add(matchedFormKey)
+
+      // undefined si aucun fichier fourni → l'UPDATE laisse la section inchangée,
+      // le CREATE tombe sur null. Sinon on pose la valeur (ou null si non matché).
+      const sectionValue: string | null | undefined =
+        formulaireFile ? (formulaire?.sectionPrincipale ?? null) : undefined
 
       // Détecter désynchronisation adresse
       let adresseDesync = false
@@ -134,6 +164,7 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
         villeEnc,
         ffessmId:        ffessm?.ffessmId ?? null,
         adresseDesync,
+        section:         sectionValue,
       }
 
       let adherentId: string
@@ -171,6 +202,20 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
     }
   }
 
+  // ── 3. Sections du formulaire non associées à un membre VPdive ─────────────
+  // Garde-fou : la jointure est par nom seul (ni licence ni DDN dans ce fichier),
+  // donc on remonte explicitement ce qui n'a matché aucun membre.
+  if (formulaireFile) {
+    for (const [k, v] of formulaireMap.entries()) {
+      if (!formulaireKeysMatched.has(k)) {
+        sectionsNonAssociees++
+        allErrors.push(
+          `Section non associée (aucun membre VPdive) : ${v.prenom} ${v.nom} → ${v.sectionPrincipale ?? '—'}`
+        )
+      }
+    }
+  }
+
   return {
     success: true,
     stats: {
@@ -178,6 +223,7 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
       misAJour,
       ignores,
       desyncsFFESSM,
+      sectionsNonAssociees,
       erreurs: allErrors,
     },
   }

@@ -117,10 +117,11 @@ export default function ImportForm({ saisons }: ImportFormProps) {
               </div>
               <div className="grid grid-cols-2 gap-3 mb-3">
                 {[
-                  { label: 'Créés',           val: result.stats.crees,         color: '#1a6642' },
-                  { label: 'Mis à jour',       val: result.stats.misAJour,      color: 'var(--csn-navy)' },
-                  { label: 'Ignorés',          val: result.stats.ignores,       color: '#7a5a00' },
-                  { label: 'Désync FFESSM',    val: result.stats.desyncsFFESSM, color: '#c2410c' },
+                  { label: 'Créés',           val: result.stats.crees,                color: '#1a6642' },
+                  { label: 'Mis à jour',       val: result.stats.misAJour,             color: 'var(--csn-navy)' },
+                  { label: 'Ignorés',          val: result.stats.ignores,              color: '#7a5a00' },
+                  { label: 'Désync FFESSM',    val: result.stats.desyncsFFESSM,        color: '#c2410c' },
+                  { label: 'Sections non assoc.', val: result.stats.sectionsNonAssociees, color: '#7a5a00' },
                 ].map(({ label, val, color }) => (
                   <div key={label}
                     className="bg-white rounded-lg px-3 py-2"
@@ -193,7 +194,7 @@ export default function ImportForm({ saisons }: ImportFormProps) {
         >
           <p className="text-[12px] text-slate-400 mb-4">
             Les fichiers <strong>Membres</strong> et <strong>Paiements</strong> sont obligatoires.
-            Le fichier <strong>FFESSM</strong> est facultatif (vérification des licences).
+            Les fichiers <strong>FFESSM</strong> (licences) et <strong>Formulaire d&apos;adhésions</strong> (sections) sont facultatifs.
           </p>
 
           <div className="flex flex-col gap-4">
@@ -211,6 +212,11 @@ export default function ImportForm({ saisons }: ImportFormProps) {
               label="Fichier FFESSM (validation licences)"
               name="ffessm"
               accept=".xlsm,.xlsx,.xls"
+            />
+            <FileInput
+              label="Formulaire d'adhésions (sections)"
+              name="formulaire"
+              accept=".xls,.xlsx,.xlsm"
             />
           </div>
         </div>
