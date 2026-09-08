@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       saisonId: true,
       licence: true,
       caci: true,
+      section: true,
     },
   })
 
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
     dateExpiration: adherent.dateExpiration ?? '31/12/2025',
     licence:        adherent.licence ?? null,
     caci:           adherent.caci    ?? null,
+    section:        adherent.section ?? null,
     labelMm:        62 as LabelWidth,
   }
 
@@ -74,6 +76,7 @@ export async function GET(req: NextRequest) {
     saisonId:   adherent.saisonId,
     nom:        adherent.nom,
     prenom:     adherent.prenom,
+    section:    adherent.section ?? null,
     expire:     adherent.dateExpiration ?? '31/12/2025',
     licence:    adherent.licence ?? null,   // ← ajouter
     caci:       adherent.caci    ?? null,   // ← ajouter

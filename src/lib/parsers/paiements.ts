@@ -109,9 +109,14 @@ export function parsePaiements(buffer: ArrayBuffer, saisonLabel: string): {
 
     // ── 3. Parser le membre ───────────────────────────────────────────────
     const membreStr = String(row['Membre'] ?? '').trim()
-    const parsed    = parseNomPrenom(membreStr)
+    let parsed = membreStr ? parseNomPrenom(membreStr) : null
     if (!parsed) {
-      errors.push(`Ligne ignorée — impossible de parser le membre : "${membreStr}"`)
+      const nom    = String(row['Nom']    ?? '').trim()
+      const prenom = String(row['Prénom'] ?? '').trim()
+      if (nom && prenom) parsed = { nom, prenom }
+    }
+    if (!parsed) {
+      errors.push(`Ligne ignorée — impossible de parser le membre : "${membreStr || `${row['Nom'] ?? ''} ${row['Prénom'] ?? ''}`.trim()}"`)
       continue
     }
 
