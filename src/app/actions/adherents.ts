@@ -28,6 +28,12 @@ export interface AdherentEtiquette {
   caci:           string | null
   imprime:        boolean
   section:        string | null
+  // Colonne calculée — pas de champ BDD dédié : reprend la même logique que
+  // l'écran "Suivi & alertes" (ffessmAbsents). Vrai si la licence a été
+  // retrouvée dans le dernier fichier FFESSM importé, ou si l'adhérent est
+  // passager (licence prise dans un autre club → pas à enregistrer ici).
+  ffessmOk:       boolean
+  passager:       boolean
 }
 
 /**
@@ -83,6 +89,8 @@ export async function getAdherentsEtiquettes(
       licence: a.licence, dateExpiration: a.dateExpiration,
       caci: a.caci, imprime: a.impressions.length > 0,
       section: a.section,
+      ffessmOk: Boolean(a.ffessmId) || a.passager,
+      passager: a.passager,
     })),
     total, page, totalPages: Math.ceil(total / perPage),
   }

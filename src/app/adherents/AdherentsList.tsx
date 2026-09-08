@@ -201,6 +201,9 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                 <th className="px-3 py-2.5 text-left text-[11px] text-slate-500 font-medium hidden lg:table-cell">
                   Expir. licence
                 </th>
+                <th className="w-16 px-2 py-2.5 text-center text-[10px] text-slate-400 font-medium hidden lg:table-cell">
+                  FFESSM
+                </th>
                 <th className="px-3 py-2.5 text-left text-[11px] text-slate-500 font-medium">CACI</th>
                 <th className="w-8 px-2 py-2.5" />
               </tr>
@@ -208,7 +211,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
             <tbody>
               {adherents.length === 0 && !isPending && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-[13px] text-slate-400">
+                  <td colSpan={10} className="px-4 py-8 text-center text-[13px] text-slate-400">
                     Aucun adhérent trouvé
                   </td>
                 </tr>
@@ -272,6 +275,24 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                     {/* Date expiration licence */}
                     <td className="px-3 py-2.5 text-[12px] text-slate-400 hidden lg:table-cell">
                       {a.dateExpiration ?? '—'}
+                    </td>
+
+                    {/* FFESSM — colonne calculée à partir du fichier FFESSM importé (cf. écran Suivi) */}
+                    <td className="px-2 py-2.5 text-center hidden lg:table-cell" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={a.ffessmOk}
+                        readOnly
+                        disabled
+                        title={
+                          a.passager
+                            ? 'Passager — licence prise dans un autre club'
+                            : a.ffessmOk
+                              ? 'Licence retrouvée dans le fichier FFESSM'
+                              : 'Absente du fichier FFESSM'
+                        }
+                        className="cursor-default"
+                      />
                     </td>
 
                     {/* CACI */}
