@@ -50,6 +50,7 @@ export default function ConfigMenu({ user }: ConfigMenuProps) {
         >
           {/* SMTP / Config générale */}
           <MenuItem href="/config" icon="smtp" label="Configuration SMTP" onClick={() => setOpen(false)} />
+          <MenuItem href="/compte" icon="key"  label="Mon compte / mot de passe" onClick={() => setOpen(false)} />
 
           {/* Admin uniquement */}
           {isAdmin && (
@@ -80,7 +81,7 @@ function MenuItem({
   onClick,
 }: {
   href: string
-  icon: 'smtp' | 'saison' | 'users'
+  icon: 'smtp' | 'saison' | 'users' | 'key'
   label: string
   onClick: () => void
 }) {
@@ -105,6 +106,12 @@ function MenuItem({
         <circle cx="9" cy="7" r="4"/>
         <path d="M23 21v-2a4 4 0 00-3-3.87"/>
         <path d="M16 3.13a4 4 0 010 7.75"/>
+      </svg>
+    ),
+    key: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="7.5" cy="15.5" r="4.5"/>
+        <path d="M10.7 12.3L21 2M16 7l3 3M18.5 4.5l2 2"/>
       </svg>
     ),
   }

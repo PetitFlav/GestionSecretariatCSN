@@ -215,11 +215,44 @@ export async function approveUserAction(
       },
     })
 
-    await sendSetupEmail(user.email, token, currentUser.id)
+    const res = await sendSetupEmail(user.email, token, currentUser.id)
+    if (!res.sent) {
+      return {
+        error: `Compte approuvé, mais l'email n'est PAS parti (${res.reason}). ` +
+               `Lien à transmettre manuellement : ${res.link}`,
+      }
+    }
 
     return { success: `Compte approuvé — email envoyé à ${user.email}` }
   } catch (err) {
     console.error('approveUserAction:', err)
+    return { error: 'Une erreur est survenue.' }
+  }
+}
+
+// ─── Renvoi du lien de création de mot de passe (admin) ─────────────────────
+
+export async function resendSetupLinkAction(userId: string): Promise<ActionResult> {
+  const currentUser = await getSessionUser()
+  if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERUSER')) {
+    return { error: 'Accès refusé.' }
+  }
+
+  try {
+    const token  = crypto.randomBytes(32).toString('hex')
+    const expiry = new Date(Date.now() + 48 * 60 * 60 * 1000) // 48h
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data:  { setupToken: token, setupTokenExpiry: expiry },
+    })
+
+    const res = await sendSetupEmail(user.email, token, currentUser.id)
+    return res.sent
+      ? { success: `Lien renvoyé à ${user.email}` }
+      : { error: `Échec d'envoi (${res.reason}). Lien : ${res.link}` }
+  } catch (err) {
+    console.error('resendSetupLinkAction:', err)
     return { error: 'Une erreur est survenue.' }
   }
 }

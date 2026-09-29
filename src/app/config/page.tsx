@@ -43,6 +43,8 @@ export default async function ConfigPage() {
                   { key: 'ENCRYPTION_KEY',  desc: 'Clé chiffrement données personnelles', ok: !!process.env.ENCRYPTION_KEY },
                   { key: 'SESSION_SECRET',  desc: 'Secret de session HTTP',               ok: !!process.env.SESSION_SECRET },
                   { key: 'DATABASE_URL',    desc: 'Base de données Supabase',              ok: !!process.env.DATABASE_URL },
+                  { key: 'SMTP_HOST / USER / PASS', desc: 'SMTP club (invitations, mot de passe oublié)', ok: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) },
+                  { key: 'NEXT_PUBLIC_APP_URL', desc: 'URL publique (liens dans les emails)', ok: !!process.env.NEXT_PUBLIC_APP_URL },
                 ].map(({ key, desc, ok }) => (
                   <tr key={key} style={{ borderBottom: '0.5px solid var(--csn-border)' }}>
                     <td className="py-2 pr-4">

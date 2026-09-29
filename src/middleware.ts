@@ -3,7 +3,13 @@ import { getIronSession } from 'iron-session'
 import { sessionOptions, SessionUser } from '@/lib/session'
 
 // Routes publiques (pas de redirect)
-const PUBLIC_ROUTES = ['/login', '/register', '/auth/setup-password']
+const PUBLIC_ROUTES = [
+  '/login',
+  '/register',
+  '/auth/setup-password',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+]
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

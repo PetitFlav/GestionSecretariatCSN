@@ -43,7 +43,12 @@ export default function LoginForm() {
           style={{ background: 'var(--csn-navy)' }}>
           Se connecter →
         </button>
-        
+
+        <Link href="/auth/forgot-password"
+          className="text-[12px] text-center mt-3 hover:underline"
+          style={{ color: 'var(--csn-blue)' }}>
+          Mot de passe oublié ?
+        </Link>
       </form>
 
       <div className="mt-4 pt-4" style={{ borderTop: '0.5px solid var(--csn-border)' }}>
