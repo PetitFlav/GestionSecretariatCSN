@@ -165,6 +165,9 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
         ffessmId:        ffessm?.ffessmId ?? null,
         adresseDesync,
         section:         sectionValue,
+        // "1ère inscription" (ISO). undefined si cellule vide → n'écrase pas une
+        // valeur déjà en base à l'UPDATE ; tombe sur null au CREATE. Immuable.
+        datePremiereInscription: membre.datePremiereInscription ?? undefined,
       }
 
       let adherentId: string

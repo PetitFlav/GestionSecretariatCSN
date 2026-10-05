@@ -8,6 +8,8 @@ import { PrintSelectionButton } from '@/components/PrintSelectionButton'
 
 interface Props { saisonId: string; saisonLabel: string }
 
+const VERT_NOUVEAU = '#16a34a'
+
 function caciColor(dateStr: string | null): string {
   if (!dateStr) return '#dc2626'
   try {
@@ -43,7 +45,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
   const [totalPages, setTotalPages] = useState(1)
   const [page, setPage]             = useState(1)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
-  const [filters, setFilters]       = useState<AdherentFilters>({ search: '', imprime: '' })
+  const [filters, setFilters]       = useState<AdherentFilters>({ search: '', imprime: '', nouveau: '' })
   const [sectionsDispo, setSectionsDispo] = useState<string[]>([])
 
   const load = useCallback((f: AdherentFilters, p: number) => {
@@ -113,6 +115,22 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
             <option value="oui">Déjà imprimés</option>
           </select>
 
+          {/* Filtre nouveaux adhérents */}
+          <select
+            value={filters.nouveau ?? ''}
+            onChange={e => applyFilters({ ...filters, nouveau: e.target.value as '' | 'oui' | 'non' })}
+            className="px-3 py-2 text-[12px] rounded-lg outline-none"
+            style={{
+              border: '0.5px solid var(--csn-border-strong)',
+              background: 'var(--csn-cream)',
+              color: 'var(--csn-navy)',
+            }}
+          >
+            <option value="">Tous statuts</option>
+            <option value="oui">Nouveaux adhérents</option>
+            <option value="non">Renouvellements</option>
+          </select>
+
           {sectionsDispo.length > 0 && (
             <select
               value={filters.section ?? ''}
@@ -151,6 +169,15 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
               style={{ borderColor: 'var(--csn-border-strong)', color: 'var(--csn-navy)' }}
             >
               Sélect. non imprimés
+            </button>
+
+            {/* Sélection rapide nouveaux adhérents (page courante) */}
+            <button
+              onClick={() => setSelected(new Set(adherents.filter(a => a.isNouveau).map(a => a.id)))}
+              className="text-[11px] px-2.5 py-1 rounded border hover:bg-slate-50 transition-colors"
+              style={{ borderColor: 'var(--csn-border-strong)', color: VERT_NOUVEAU }}
+            >
+              Sélect. nouveaux
             </button>
 
             {/* Bouton impression — branché sur PrintSelectionButton */}
@@ -248,14 +275,16 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                       </span>
                     </td>
 
-                    {/* Nom */}
+                    {/* Nom — vert gras si nouvel adhérent */}
                     <td className="px-3 py-2.5 text-[13px] font-medium"
-                      style={{ color: 'var(--csn-navy)' }}>
+                      title={a.isNouveau ? 'Nouvel adhérent cette saison' : undefined}
+                      style={{ color: a.isNouveau ? VERT_NOUVEAU : 'var(--csn-navy)', fontWeight: a.isNouveau ? 700 : undefined }}>
                       {a.nom}
                     </td>
 
-                    {/* Prénom */}
-                    <td className="px-3 py-2.5 text-[13px]" style={{ color: '#1a2e3f' }}>
+                    {/* Prénom — vert gras si nouvel adhérent */}
+                    <td className="px-3 py-2.5 text-[13px]"
+                      style={{ color: a.isNouveau ? VERT_NOUVEAU : '#1a2e3f', fontWeight: a.isNouveau ? 700 : undefined }}>
                       {a.prenom}
                     </td>
 

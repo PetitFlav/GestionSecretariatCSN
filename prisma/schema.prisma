@@ -27,32 +27,33 @@ model Saison {
 }
 
 model Adherent {
-  id                String             @id @default(cuid())
-  saisonId          String
-  nom               String
-  prenom            String
-  montant           String?
-  dateExpiration    String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  adresseDesync     Boolean            @default(false)
-  adresseEnc        String?
-  civilite          String?
-  codePostalEnc     String?
-  dateNaissanceEnc  String?
-  datePaiement      String?
-  emailEnc          String?
-  ffessmId          String?
-  licence           String?
-  villeEnc          String?
-  caci              String?
-  passager          Boolean            @default(false)
-  section           String?
-  saison            Saison             @relation(fields: [saisonId], references: [id], onDelete: Cascade)
-  attestationEmails AttestationEmail[]
-  impressions       Impression[]
-  rappelsCaci       RappelCaci[]
-  validation        ValidationFFESSM?
+  id                      String             @id @default(cuid())
+  saisonId                String
+  nom                     String
+  prenom                  String
+  montant                 String?
+  dateExpiration          String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  adresseDesync           Boolean            @default(false)
+  adresseEnc              String?
+  civilite                String?
+  codePostalEnc           String?
+  dateNaissanceEnc        String?
+  datePaiement            String?
+  emailEnc                String?
+  ffessmId                String?
+  licence                 String?
+  villeEnc                String?
+  caci                    String?
+  passager                Boolean            @default(false)
+  section                 String?
+  datePremiereInscription String?            // ISO "AAAA-MM-JJ" — VPdive "1ère inscription"
+  saison                  Saison             @relation(fields: [saisonId], references: [id], onDelete: Cascade)
+  attestationEmails       AttestationEmail[]
+  impressions             Impression[]
+  rappelsCaci             RappelCaci[]
+  validation              ValidationFFESSM?
 
   @@unique([saisonId, nom, prenom])
   @@index([saisonId])

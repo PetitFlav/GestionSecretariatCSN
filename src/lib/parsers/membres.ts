@@ -13,24 +13,26 @@ export interface MembreRow {
   codePostal: string | null
   ville: string | null
   caci: string | null
+  datePremiereInscription: string | null   // ISO "AAAA-MM-JJ" — colonne "1ère inscription"
   key: string
 }
 
 // Index de colonnes fixes du fichier VPdive Membres (0-based)
 // Indépendant de la présence ou non d'une ligne d'entête
 const COL = {
-  numero:         0,
-  licence:        2,
-  dateExpiration: 3,
-  civilite:       4,
-  nom:            5,
-  prenom:         6,
-  dateNaissance:  8,
-  email:          9,
-  adresse:        10,
-  codePostal:     11,
-  ville:          12,
-  caci:           15,
+  numero:              0,
+  licence:             2,
+  dateExpiration:      3,
+  civilite:            4,
+  nom:                 5,
+  prenom:              6,
+  dateNaissance:       8,
+  email:               9,
+  adresse:             10,
+  codePostal:          11,
+  ville:               12,
+  caci:                15,
+  premiereInscription: 36,   // "1ère inscription" (après "Commentaire" 35, avant "Année(s)" 37)
 } as const
 
 function isHeaderRow(row: unknown[]): boolean {
@@ -64,6 +66,19 @@ function toDate(val: unknown): string | null {
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s
 
   return null
+}
+
+/**
+ * Convertit une date française JJ/MM/AAAA en ISO AAAA-MM-JJ (zero-paddée).
+ * Pur réagencement de chaîne — aucune construction de Date, donc aucun fuseau.
+ * L'ISO garantit que l'ordre lexicographique = l'ordre chronologique,
+ * ce qui permet de filtrer datePremiereInscription au niveau base (Prisma { gt }).
+ */
+function frToIso(fr: string | null): string | null {
+  if (!fr) return null
+  const m = fr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (!m) return null
+  return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
 }
 
 export function parseMembres(buffer: ArrayBuffer): {
@@ -137,6 +152,7 @@ export function parseMembres(buffer: ArrayBuffer): {
       codePostal,      // déjà normalisé (padStart 5 chiffres)
       ville:          toStr(row[COL.ville]) ? cleanName(toStr(row[COL.ville])!) : null,
       caci:           toDate(row[COL.caci]),
+      datePremiereInscription: frToIso(toDate(row[COL.premiereInscription])),
       key:            makeKey(cleanName(nom), cleanName(prenom)),
     })
   }

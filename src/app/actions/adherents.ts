@@ -12,6 +12,7 @@ export interface AdherentFilters {
   search?:      string
   imprime?:     'oui' | 'non' | ''
   attestation?: 'oui' | 'non' | ''
+  nouveau?:     'oui' | 'non' | ''   // 'oui' = 1ère inscription cette saison
   section?:     string    // libellé canonique exact, ou '' = toutes
   page?:        number
   perPage?:     number
@@ -28,6 +29,7 @@ export interface AdherentEtiquette {
   caci:           string | null
   imprime:        boolean
   section:        string | null
+  isNouveau:      boolean
 }
 
 /**
@@ -43,14 +45,37 @@ async function getSaisonDateExpire(saisonId: string): Promise<string | null> {
   return saison?.dateExpireLicence ?? null
 }
 
+/**
+ * Seuil "nouvel adhérent" pour une saison, au format ISO AAAA-MM-JJ.
+ * Règle métier : est nouveau tout adhérent dont la 1ère inscription VPdive
+ * est postérieure au 31/07 de l'année de début de la saison active
+ * (fin de la saison précédente = début de campagne d'inscription).
+ * Ex : dateDebut "01/09/2026" → seuil "2026-07-31".
+ * Renvoie null si dateDebut absente ou malformée → le filtre reste alors inerte.
+ */
+function computeSeuilNouveau(dateDebut: string | null): string | null {
+  if (!dateDebut) return null
+  const annee = dateDebut.split('/')[2]        // "01/09/2026" → "2026"
+  if (!annee || !/^\d{4}$/.test(annee)) return null
+  return `${annee}-07-31`
+}
+
 export async function getAdherentsEtiquettes(
   saisonId: string,
   filters: AdherentFilters = {}
 ): Promise<{ adherents: AdherentEtiquette[]; total: number; page: number; totalPages: number }> {
   await requireAuth()
-  const page             = filters.page    ?? 1
-  const perPage          = filters.perPage ?? 25
-  const dateExpireLicence = await getSaisonDateExpire(saisonId)
+  const page    = filters.page    ?? 1
+  const perPage = filters.perPage ?? 25
+
+  // On récupère d'un coup l'expiration de licence (filtre membres actifs)
+  // ET la date de début (pour dériver le seuil "nouvel adhérent").
+  const saison = await prisma.saison.findUnique({
+    where:  { id: saisonId },
+    select: { dateExpireLicence: true, dateDebut: true },
+  })
+  const dateExpireLicence = saison?.dateExpireLicence ?? null
+  const seuilNouveau      = computeSeuilNouveau(saison?.dateDebut ?? null)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
@@ -69,6 +94,17 @@ export async function getAdherentsEtiquettes(
   if (filters.imprime === 'non') where.impressions = { none: { status: 'PRINTED' } }
   if (filters.section) where.section = filters.section
 
+  // Filtre "nouvel adhérent" — comparaison lexicographique ISO = chronologique.
+  // 'oui' : strictement > seuil (les null = pas nouveau, donc exclus).
+  // 'non' : NOT(> seuil) → couvre <= seuil ET les null (renouvellements + inconnus).
+  if (seuilNouveau) {
+    if (filters.nouveau === 'oui') {
+      where.datePremiereInscription = { gt: seuilNouveau }
+    } else if (filters.nouveau === 'non') {
+      where.NOT = { datePremiereInscription: { gt: seuilNouveau } }
+    }
+  }
+
   const [total, rows] = await Promise.all([
     prisma.adherent.count({ where }),
     prisma.adherent.findMany({
@@ -83,6 +119,9 @@ export async function getAdherentsEtiquettes(
       licence: a.licence, dateExpiration: a.dateExpiration,
       caci: a.caci, imprime: a.impressions.length > 0,
       section: a.section,
+      isNouveau: !!seuilNouveau
+        && !!a.datePremiereInscription
+        && a.datePremiereInscription > seuilNouveau,
     })),
     total, page, totalPages: Math.ceil(total / perPage),
   }
