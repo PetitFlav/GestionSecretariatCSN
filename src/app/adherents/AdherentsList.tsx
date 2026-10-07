@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getAdherentsEtiquettes, getSectionsDisponibles, AdherentEtiquette, AdherentFilters } from '@/app/actions/adherents'
 import { PrintSelectionButton } from '@/components/PrintSelectionButton'
+import { StatutBadge } from '@/components/StatutBadge'
+import { STATUTS, STATUT_LABEL, Statut, peutAvoirEtiquette } from '@/lib/statut'
 
 interface Props { saisonId: string; saisonLabel: string }
 
@@ -43,7 +45,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
   const [totalPages, setTotalPages] = useState(1)
   const [page, setPage]             = useState(1)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
-  const [filters, setFilters]       = useState<AdherentFilters>({ search: '', imprime: '' })
+  const [filters, setFilters]       = useState<AdherentFilters>({ search: '', imprime: '', statut: '' })
   const [sectionsDispo, setSectionsDispo] = useState<string[]>([])
 
   const load = useCallback((f: AdherentFilters, p: number) => {
@@ -64,7 +66,12 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
 
   function applyFilters(f: AdherentFilters) { setFilters(f); load(f, 1) }
 
+  // Les passagers n'ont pas d'étiquette (pas d'accès aux entraînements)
+  const imprimables = adherents.filter(a => peutAvoirEtiquette(a.statut))
+
   function toggleOne(id: string) {
+    const a = adherents.find(x => x.id === id)
+    if (a && !peutAvoirEtiquette(a.statut)) return
     setSelected(prev => {
       const n = new Set(prev)
       n.has(id) ? n.delete(id) : n.add(id)
@@ -73,9 +80,9 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
   }
 
   function toggleAll() {
-    setSelected(selected.size === adherents.length
+    setSelected(selected.size === imprimables.length
       ? new Set()
-      : new Set(adherents.map(a => a.id))
+      : new Set(imprimables.map(a => a.id))
     )
   }
 
@@ -130,6 +137,22 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
               ))}
             </select>
           )}
+
+          <select
+            value={filters.statut ?? ''}
+            onChange={e => applyFilters({ ...filters, statut: e.target.value as Statut | '' })}
+            className="px-3 py-2 text-[12px] rounded-lg outline-none"
+            style={{
+              border: '0.5px solid var(--csn-border-strong)',
+              background: 'var(--csn-cream)',
+              color: 'var(--csn-navy)',
+            }}
+          >
+            <option value="">Tous statuts</option>
+            {STATUTS.map(s => (
+              <option key={s} value={s}>{STATUT_LABEL[s]}</option>
+            ))}
+          </select>
         </div>
 
         {/* Barre actions */}
@@ -146,7 +169,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
           <div className="flex gap-2 items-center">
             {/* Sélection rapide non imprimés */}
             <button
-              onClick={() => setSelected(new Set(adherents.filter(a => !a.imprime).map(a => a.id)))}
+              onClick={() => setSelected(new Set(imprimables.filter(a => !a.imprime).map(a => a.id)))}
               className="text-[11px] px-2.5 py-1 rounded border hover:bg-slate-50 transition-colors"
               style={{ borderColor: 'var(--csn-border-strong)', color: 'var(--csn-navy)' }}
             >
@@ -182,7 +205,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                 <th className="w-8 px-3 py-2.5">
                   <input
                     type="checkbox"
-                    checked={selected.size === adherents.length && adherents.length > 0}
+                    checked={selected.size === imprimables.length && imprimables.length > 0}
                     onChange={toggleAll}
                     className="cursor-pointer"
                   />
@@ -219,11 +242,12 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
               {adherents.map((a, i) => {
                 const jours = joursRestants(a.caci)
                 const isSelected = selected.has(a.id)
+                const imprimable = peutAvoirEtiquette(a.statut)
                 return (
                   <tr
                     key={a.id}
                     onClick={() => toggleOne(a.id)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                    className={imprimable ? 'cursor-pointer transition-colors hover:bg-slate-50' : 'cursor-default'}
                     style={{
                       borderBottom: i < adherents.length - 1
                         ? '0.5px solid var(--csn-border)'
@@ -237,7 +261,9 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleOne(a.id)}
-                        className="cursor-pointer"
+                        disabled={!imprimable}
+                        title={imprimable ? undefined : "Passager — pas d'étiquette"}
+                        className={imprimable ? 'cursor-pointer' : 'cursor-not-allowed'}
                       />
                     </td>
 
@@ -255,6 +281,7 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                     <td className="px-3 py-2.5 text-[13px] font-medium"
                       style={{ color: 'var(--csn-navy)' }}>
                       {a.nom}
+                      <span className="ml-1.5"><StatutBadge statut={a.statut} /></span>
                     </td>
 
                     {/* Prénom */}
@@ -285,8 +312,10 @@ export default function AdherentsList({ saisonId, saisonLabel }: Props) {
                         readOnly
                         disabled
                         title={
-                          a.passager
-                            ? 'Passager — licence prise dans un autre club'
+                          a.statut === 'EXTERNE'
+                            ? 'Adhérent externe — licence prise dans un autre club'
+                            : a.ffessmForce && a.ffessmOk
+                              ? 'Validation FFESSM forcée manuellement'
                             : a.ffessmOk
                               ? 'Licence retrouvée dans le fichier FFESSM'
                               : 'Absente du fichier FFESSM'

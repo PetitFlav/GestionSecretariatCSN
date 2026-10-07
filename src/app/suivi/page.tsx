@@ -4,6 +4,7 @@ import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 import { getSaisonActive, getSuivi, AlerteFFESSM } from '@/app/actions/adherents'
 import SuiviCaciSection from './SuiviCaciSection'
+import { StatutBadge } from '@/components/StatutBadge'
 
 export default async function SuiviPage() {
   const user = await getSessionUser()
@@ -41,7 +42,7 @@ export default async function SuiviPage() {
               style={{ color: suivi.totalAssures === suivi.totalAdherents ? '#16a34a' : '#d97706' }}>
               {suivi.totalAssures} / {suivi.totalAdherents}
             </div>
-            <div className="text-[11px] text-slate-400">assurés FFESSM</div>
+            <div className="text-[11px] text-slate-400">assurés FFESSM (hors externes)</div>
           </div>
         </div>
 
@@ -55,7 +56,7 @@ export default async function SuiviPage() {
         {/* FFESSM non assurés */}
         {suivi.ffessmAbsents.length > 0 && (
           <FFESSMSection title="Non enregistrés FFESSM" count={suivi.ffessmAbsents.length} severity="critical"
-            description="Ces adhérents ont payé leur cotisation mais ne sont pas enregistrés sur le portail FFESSM. Ils ne sont pas assurés.">
+            description="Licenciés ou passagers absents du fichier FFESSM importé : non assurés, ou non retrouvés par la jointure. Si la licence existe bien sur le portail FFESSM, ouvrez la fiche et cochez « Validation FFESSM forcée ».">
             {suivi.ffessmAbsents.map(a => <AlertRow key={a.id} a={a} />)}
           </FFESSMSection>
         )}
@@ -65,6 +66,14 @@ export default async function SuiviPage() {
           <FFESSMSection title="Adresse désynchronisée FFESSM" count={suivi.ffessmDesync.length} severity="warning"
             description="Ces adhérents sont enregistrés sur FFESSM mais leur adresse diffère de VPdive.">
             {suivi.ffessmDesync.map(a => <AlertRow key={a.id} a={a} />)}
+          </FFESSMSection>
+        )}
+
+        {/* Validations FFESSM forcées — pour garder la trace des déblocages manuels */}
+        {suivi.ffessmForces.length > 0 && (
+          <FFESSMSection title="Validations FFESSM forcées" count={suivi.ffessmForces.length} severity="info"
+            description="Non retrouvés automatiquement dans le fichier FFESSM, validés manuellement. À revérifier si un import ultérieur ne les retrouve toujours pas.">
+            {suivi.ffessmForces.map(a => <AlertRow key={a.id} a={a} />)}
           </FFESSMSection>
         )}
 
@@ -99,12 +108,14 @@ export default async function SuiviPage() {
 }
 
 function FFESSMSection({ title, count, severity, description, children }: {
-  title: string; count: number; severity: 'critical' | 'warning'
+  title: string; count: number; severity: 'critical' | 'warning' | 'info'
   description: string; children: React.ReactNode
 }) {
   const c = severity === 'critical'
     ? { border: '#fca5a5', bg: '#fff5f5', dot: '#dc2626' }
-    : { border: '#e8c96a', bg: '#fffdf0', dot: '#d97706' }
+    : severity === 'warning'
+      ? { border: '#e8c96a', bg: '#fffdf0', dot: '#d97706' }
+      : { border: '#cbd5e1', bg: '#f8fafc', dot: '#64748b' }
   return (
     <div className="mb-5 rounded-xl overflow-hidden" style={{ border: `0.5px solid ${c.border}` }}>
       <div className="px-4 py-3 flex items-center gap-2" style={{ background: c.bg, borderBottom: `0.5px solid ${c.border}` }}>
@@ -123,18 +134,15 @@ function AlertRow({ a }: { a: AlerteFFESSM }) {
     <div className="flex items-center gap-3 px-4 py-2.5" style={{ borderBottom: '0.5px solid var(--csn-border)' }}>
       <div className="flex-1 min-w-0">
         <span className="text-[13px] font-medium" style={{ color: 'var(--csn-navy)' }}>{a.prenom} {a.nom}</span>
-        {a.passager && (
-          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full"
-            style={{ background: '#f1f5f9', color: '#64748b', border: '0.5px solid #cbd5e1' }}>passager</span>
-        )}
+        <span className="ml-2"><StatutBadge statut={a.statut} /></span>
         {a.detail && <span className="ml-2 text-[12px] text-slate-400">{a.detail}</span>}
       </div>
       <span className="text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0"
         style={{
-          background: a.type === 'absent' ? '#fee2e2' : '#fff3cd',
-          color:      a.type === 'absent' ? '#dc2626' : '#7a5a00',
+          background: a.type === 'absent' ? '#fee2e2' : a.type === 'desync' ? '#fff3cd' : '#eaf7f0',
+          color:      a.type === 'absent' ? '#dc2626' : a.type === 'desync' ? '#7a5a00' : '#1a6642',
         }}>
-        {a.type === 'absent' ? 'Non assuré' : 'Adresse diff.'}
+        {a.type === 'absent' ? 'Non assuré' : a.type === 'desync' ? 'Adresse diff.' : 'Forcé'}
       </span>
       <Link href={`/adherents/${a.id}`}
         className="text-[11px] px-2 py-1 rounded border hover:bg-slate-50 flex-shrink-0"

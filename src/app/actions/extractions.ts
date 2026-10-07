@@ -136,7 +136,7 @@ export async function extractionOms(saisonId: string): Promise<OmsExtractionResu
 
   // Filtre : membres actifs de la saison (dateExpiration === dateExpireLicence).
   // C'est ce qui permet de sortir une saison passée sans être écrasé,
-  // contrairement à VPdive. Les passagers (licence dans un autre club) sont inclus.
+  // contrairement à VPdive. Tous les statuts (licenciés, externes, passagers) sont inclus.
   const where = saison.dateExpireLicence
     ? { saisonId, dateExpiration: saison.dateExpireLicence }
     : { saisonId }

@@ -2,7 +2,9 @@ import { redirect, notFound } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 import { getAdherentDetail } from '@/app/actions/adherents'
-import { BoutonEtiquette, BoutonAttestation, TogglePassager } from './AdherentButtons'
+import { BoutonEtiquette, BoutonAttestation, StatutAdherentForm } from './AdherentButtons'
+import { StatutBadge } from '@/components/StatutBadge'
+import { peutAvoirEtiquette } from '@/lib/statut'
 
 interface Props {
   params: { id: string }
@@ -30,10 +32,12 @@ export default async function AdherentDetailPage({ params }: Props) {
               <h1 className="text-[18px] font-medium" style={{ color: 'var(--csn-navy)' }}>
                 {a.prenom} {a.nom}
               </h1>
-              {a.passager && (
+              <StatutBadge statut={a.statut} size="md" />
+              {a.ffessmForce && !a.ffessmId && (
                 <span className="text-[11px] px-2 py-0.5 rounded-full"
-                  style={{ background: '#f1f5f9', color: '#64748b', border: '0.5px solid #cbd5e1' }}>
-                  passager
+                  style={{ background: '#eaf7f0', color: '#1a6642', border: '0.5px solid #7dd4a8' }}
+                  title={a.ffessmForceNote ?? undefined}>
+                  FFESSM forcé
                 </span>
               )}
               {a.adresseDesync && (
@@ -48,19 +52,21 @@ export default async function AdherentDetailPage({ params }: Props) {
             </p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            <BoutonEtiquette adherentId={a.id} />
+            {peutAvoirEtiquette(a.statut) && <BoutonEtiquette adherentId={a.id} />}
             <BoutonAttestation adherentId={a.id} />
           </div>
         </div>
 
-        {/* Statut passager */}
+        {/* Statut d'adhésion */}
         <Section title="Statut d'adhésion">
           <div className="py-3">
-            <TogglePassager adherentId={a.id} initialValue={a.passager} />
-            <p className="text-[11px] text-slate-400 mt-2">
-              Un passager adhère au club mais prend sa licence FFESSM dans un autre club.
-              Il n&apos;apparaîtra pas comme &quot;non assuré&quot; dans le suivi.
-            </p>
+            <StatutAdherentForm
+              adherentId={a.id}
+              initialStatut={a.statut}
+              initialForce={a.ffessmForce}
+              initialNote={a.ffessmForceNote}
+              ffessmTrouve={Boolean(a.ffessmId)}
+            />
           </div>
         </Section>
 

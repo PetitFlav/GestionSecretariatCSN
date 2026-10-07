@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { togglePassager } from '@/app/actions/adherents'
+import { updateStatutAdherent } from '@/app/actions/adherents'
+import { STATUTS, STATUT_LABEL, STATUT_DESCRIPTION, Statut } from '@/lib/statut'
 
 const AGENT_URL       = 'http://localhost:3333'
 const AGENT_TIMEOUT   = 2000
@@ -123,38 +124,105 @@ export function BoutonAttestation({ adherentId }: { adherentId: string }) {
   )
 }
 
-// ── TogglePassager ────────────────────────────────────────────────────────────
-export function TogglePassager({
-  adherentId, initialValue,
+// ── StatutAdherentForm ────────────────────────────────────────────────────────
+export function StatutAdherentForm({
+  adherentId, initialStatut, initialForce, initialNote, ffessmTrouve,
 }: {
-  adherentId: string; initialValue: boolean
+  adherentId:    string
+  initialStatut: Statut
+  initialForce:  boolean
+  initialNote:   string | null
+  ffessmTrouve:  boolean   // licence retrouvée dans le fichier FFESSM importé
 }) {
-  const [passager, setPassager]      = useState(initialValue)
+  const [statut, setStatut] = useState<Statut>(initialStatut)
+  const [force, setForce]   = useState(initialForce)
+  const [note, setNote]     = useState(initialNote ?? '')
+  const [msg, setMsg]       = useState<{ ok: boolean; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
-  function handleChange(checked: boolean) {
+  const dirty = statut !== initialStatut || force !== initialForce
+    || (force && note.trim() !== (initialNote ?? ''))
+
+  // Le forçage n'a de sens que pour quelqu'un censé être dans le fichier FFESSM
+  // du club et qui n'y a pas été retrouvé.
+  const forcageUtile = statut !== 'EXTERNE' && !ffessmTrouve
+
+  function save() {
+    setMsg(null)
     startTransition(async () => {
-      await togglePassager(adherentId, checked)
-      setPassager(checked)
-      router.refresh()
+      const res = await updateStatutAdherent(adherentId, {
+        statut, ffessmForce: forcageUtile && force, ffessmForceNote: note,
+      })
+      setMsg(res.success
+        ? { ok: true,  text: 'Enregistré' }
+        : { ok: false, text: res.error ?? 'Erreur' })
+      if (res.success) router.refresh()
     })
   }
 
+  const fieldStyle = {
+    border: '0.5px solid var(--csn-border-strong)',
+    background: 'var(--csn-cream)',
+    color: 'var(--csn-navy)',
+  }
+
   return (
-    <label className="flex items-center gap-2.5 cursor-pointer">
-      <div className="relative">
-        <input type="checkbox" checked={passager}
-          onChange={e => handleChange(e.target.checked)}
-          disabled={isPending} className="sr-only" />
-        <div className="w-9 h-5 rounded-full transition-colors"
-          style={{ background: passager ? 'var(--csn-navy)' : '#e2e8f0', opacity: isPending ? 0.6 : 1 }} />
-        <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-          style={{ transform: passager ? 'translateX(16px)' : 'translateX(0)' }} />
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={statut}
+          onChange={e => setStatut(e.target.value as Statut)}
+          disabled={isPending}
+          className="px-3 py-2 text-[13px] rounded-lg outline-none"
+          style={fieldStyle}
+        >
+          {STATUTS.map(s => <option key={s} value={s}>{STATUT_LABEL[s]}</option>)}
+        </select>
+        <span className="text-[11px] text-slate-400 flex-1 min-w-[200px]">
+          {STATUT_DESCRIPTION[statut]}
+        </span>
       </div>
-      <span className="text-[13px]" style={{ color: passager ? 'var(--csn-navy)' : '#64748b' }}>
-        {passager ? 'Passager (licence dans un autre club)' : 'Membre standard'}
-      </span>
-    </label>
+
+      {forcageUtile && (
+        <div className="rounded-lg p-3 flex flex-col gap-2"
+          style={{ background: force ? '#eaf7f0' : '#fff8e6', border: `0.5px solid ${force ? '#7dd4a8' : '#e8c96a'}` }}>
+          <label className="flex items-center gap-2 cursor-pointer text-[13px]" style={{ color: 'var(--csn-navy)' }}>
+            <input type="checkbox" checked={force} disabled={isPending}
+              onChange={e => setForce(e.target.checked)} />
+            Validation FFESSM forcée
+          </label>
+          <p className="text-[11px] text-slate-500">
+            Non retrouvé dans le fichier FFESSM importé. Cochez si vous avez vérifié sur le
+            portail FFESSM que la licence est bien enregistrée : la personne sortira des anomalies.
+          </p>
+          {force && (
+            <input
+              type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Motif (ex. : nom de naissance différent sur FFESSM)"
+              disabled={isPending}
+              className="px-3 py-2 text-[12px] rounded-lg outline-none"
+              style={fieldStyle}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={!dirty || isPending}
+          className="text-[12px] px-3 py-2 rounded-lg text-white transition-opacity disabled:opacity-40"
+          style={{ background: 'var(--csn-navy)' }}
+        >
+          {isPending ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+        {msg && (
+          <span className="text-[12px]" style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>{msg.text}</span>
+        )}
+      </div>
+    </div>
   )
 }

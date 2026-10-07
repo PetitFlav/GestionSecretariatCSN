@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { requireAuth } from '@/lib/session'
+import { Statut, isStatut, soumisControleFFESSM } from '@/lib/statut'
 
 export async function getSaisonActive() {
   return prisma.saison.findFirst({ where: { isActive: true } })
@@ -13,6 +14,7 @@ export interface AdherentFilters {
   imprime?:     'oui' | 'non' | ''
   attestation?: 'oui' | 'non' | ''
   section?:     string    // libellé canonique exact, ou '' = toutes
+  statut?:      Statut | ''
   page?:        number
   perPage?:     number
 }
@@ -30,10 +32,12 @@ export interface AdherentEtiquette {
   section:        string | null
   // Colonne calculée — pas de champ BDD dédié : reprend la même logique que
   // l'écran "Suivi & alertes" (ffessmAbsents). Vrai si la licence a été
-  // retrouvée dans le dernier fichier FFESSM importé, ou si l'adhérent est
-  // passager (licence prise dans un autre club → pas à enregistrer ici).
+  // retrouvée dans le dernier fichier FFESSM importé, si l'adhérent est
+  // externe (licence prise dans un autre club → pas à enregistrer ici),
+  // ou si la validation a été forcée manuellement.
   ffessmOk:       boolean
-  passager:       boolean
+  statut:         Statut
+  ffessmForce:    boolean
 }
 
 /**
@@ -74,6 +78,7 @@ export async function getAdherentsEtiquettes(
   if (filters.imprime === 'oui') where.impressions = { some: { status: 'PRINTED' } }
   if (filters.imprime === 'non') where.impressions = { none: { status: 'PRINTED' } }
   if (filters.section) where.section = filters.section
+  if (filters.statut)  where.statut  = filters.statut
 
   const [total, rows] = await Promise.all([
     prisma.adherent.count({ where }),
@@ -89,8 +94,9 @@ export async function getAdherentsEtiquettes(
       licence: a.licence, dateExpiration: a.dateExpiration,
       caci: a.caci, imprime: a.impressions.length > 0,
       section: a.section,
-      ffessmOk: Boolean(a.ffessmId) || a.passager,
-      passager: a.passager,
+      ffessmOk: isFFESSMOk(a),
+      statut: a.statut,
+      ffessmForce: a.ffessmForce,
     })),
     total, page, totalPages: Math.ceil(total / perPage),
   }
@@ -189,9 +195,9 @@ export interface AlerteFFESSM {
   id:       string
   nom:      string
   prenom:   string
-  type:     'absent' | 'desync'
+  type:     'absent' | 'desync' | 'force'
   detail?:  string
-  passager: boolean
+  statut:   Statut
 }
 
 export interface SuiviResult {
@@ -199,6 +205,9 @@ export interface SuiviResult {
   caciExpirentBientot: AlerteCaci[]
   ffessmAbsents:       AlerteFFESSM[]
   ffessmDesync:        AlerteFFESSM[]
+  ffessmForces:        AlerteFFESSM[]
+  // Compteur « assurés FFESSM » : uniquement les personnes censées être dans
+  // le fichier FFESSM du club (licenciés + passagers, pas les externes).
   totalAdherents:      number
   totalAssures:        number
 }
@@ -209,7 +218,7 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   // Récupérer la date d'expiration de licence attendue pour cette saison
   // ex: "31/12/2026" — seuls les adhérents avec cette dateExpiration
   // sont considérés comme membres actifs de la saison en cours.
-  // Les autres (date différente ou null) sont des passagers d'une autre saison
+  // Les autres (date différente ou null) sont des membres d'une autre saison
   // ou des entrées parasites à ignorer dans le suivi.
   const saison = await prisma.saison.findUnique({
     where:  { id: saisonId },
@@ -225,7 +234,8 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
     orderBy: [{ nom: 'asc' }, { prenom: 'asc' }],
     select: {
       id: true, nom: true, prenom: true, licence: true,
-      caci: true, ffessmId: true, adresseDesync: true, passager: true,
+      caci: true, ffessmId: true, adresseDesync: true,
+      statut: true, ffessmForce: true, ffessmForceNote: true,
       adresseEnc: true, codePostalEnc: true, villeEnc: true,
     },
   })
@@ -235,6 +245,7 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   const caciExpirentBientot: AlerteCaci[]   = []
   const ffessmAbsents:       AlerteFFESSM[] = []
   const ffessmDesync:        AlerteFFESSM[] = []
+  const ffessmForces:        AlerteFFESSM[] = []
 
   // Récupérer le nombre de rappels CACI par adhérent
   // Rappels CACI — filtre par saisonId uniquement (types Prisma stricts)
@@ -276,11 +287,20 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
     }
 
     // ── FFESSM
-    // La jointure lors de l'import est maintenant faite par numéro de licence
-    // (fallback nom+prénom si licence absente).
+    // La jointure à l'import se fait par numéro de licence (VPdive « Licence »
+    // = FFESSM « Identifiant »), avec repli sur nom+prénom.
     // ffessmId absent = licence VPdive non trouvée dans le fichier FFESSM importé
     //                 = la personne n'est pas assurée FFESSM cette saison.
-    if (!a.ffessmId && !a.passager) {
+    // Exclus du contrôle : les externes (licence ailleurs) et les validations forcées.
+    if (!soumisControleFFESSM(a.statut)) {
+      // externe : rien à contrôler côté FFESSM du club
+    } else if (!a.ffessmId && a.ffessmForce) {
+      ffessmForces.push({
+        id: a.id, nom: a.nom, prenom: a.prenom, type: 'force',
+        detail: a.ffessmForceNote || (a.licence ? `Licence ${a.licence}` : undefined),
+        statut: a.statut,
+      })
+    } else if (!a.ffessmId) {
       // Enrichir le détail avec le numéro de licence VPdive pour faciliter le diagnostic
       const detailLicence = a.licence
         ? `Licence ${a.licence} absente du fichier FFESSM`
@@ -292,7 +312,7 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
         prenom:   a.prenom,
         type:     'absent',
         detail:   detailLicence,
-        passager: a.passager,
+        statut:   a.statut,
       })
     } else if (a.adresseDesync) {
       const adresse = [decrypt(a.adresseEnc), decrypt(a.codePostalEnc), decrypt(a.villeEnc)]
@@ -303,7 +323,7 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
         prenom:   a.prenom,
         type:     'desync',
         detail:   adresse || undefined,
-        passager: a.passager,
+        statut:   a.statut,
       })
     }
   }
@@ -315,16 +335,20 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
   caciExpirentBientot.sort(alpha)
   ffessmAbsents.sort(alpha)
   ffessmDesync.sort(alpha)
+  ffessmForces.sort(alpha)
+
+  // Compteurs sur les membres actifs de la saison uniquement
+  // (dateExpiration = dateExpireLicence de la saison), hors externes.
+  const controles = adherents.filter(a => soumisControleFFESSM(a.statut))
 
   return {
     caciExpires,
     caciExpirentBientot,
     ffessmAbsents,
     ffessmDesync,
-    // Compteurs sur les membres actifs de la saison uniquement
-    // (dateExpiration = dateExpireLicence de la saison)
-    totalAdherents: adherents.length,
-    totalAssures:   adherents.filter(a => !!a.ffessmId).length,
+    ffessmForces,
+    totalAdherents: controles.length,
+    totalAssures:   controles.filter(a => !!a.ffessmId || a.ffessmForce).length,
   }
 }
 
@@ -334,7 +358,8 @@ export interface AdherentDetail {
   id: string; nom: string; prenom: string; civilite: string | null
   licence: string | null; montant: string | null; datePaiement: string | null
   dateExpiration: string | null; caci: string | null
-  adresseDesync: boolean; ffessmId: string | null; passager: boolean
+  adresseDesync: boolean; ffessmId: string | null
+  statut: Statut; ffessmForce: boolean; ffessmForceNote: string | null
   email: string | null; dateNaissance: string | null
   adresse: string | null; codePostal: string | null; ville: string | null
   ffessmStatut:     string | null
@@ -360,7 +385,8 @@ export async function getAdherentDetail(id: string): Promise<AdherentDetail | nu
     id: a.id, nom: a.nom, prenom: a.prenom, civilite: a.civilite,
     licence: a.licence, montant: a.montant, datePaiement: a.datePaiement,
     dateExpiration: a.dateExpiration, caci: a.caci,
-    adresseDesync: a.adresseDesync, ffessmId: a.ffessmId, passager: a.passager,
+    adresseDesync: a.adresseDesync, ffessmId: a.ffessmId,
+    statut: a.statut, ffessmForce: a.ffessmForce, ffessmForceNote: a.ffessmForceNote,
     email:         decrypt(a.emailEnc),
     dateNaissance: decrypt(a.dateNaissanceEnc),
     adresse:       decrypt(a.adresseEnc),
@@ -383,16 +409,28 @@ function diffJours(dateStr: string, now: number): number {
   } catch { return -999 }
 }
 
-// ── Toggle passager ───────────────────────────────────────────────────────────
+// ── Statut d'adhésion ─────────────────────────────────────────────────────────
 
-export async function togglePassager(
+function isFFESSMOk(a: { ffessmId: string | null; statut: Statut; ffessmForce: boolean }): boolean {
+  return Boolean(a.ffessmId) || !soumisControleFFESSM(a.statut) || a.ffessmForce
+}
+
+export async function updateStatutAdherent(
   adherentId: string,
-  passager:   boolean
-): Promise<{ success: boolean }> {
+  input: { statut: string; ffessmForce: boolean; ffessmForceNote: string | null }
+): Promise<{ success: boolean; error?: string }> {
   await requireAuth()
+  if (!isStatut(input.statut)) return { success: false, error: 'Statut invalide' }
+
+  const note = input.ffessmForceNote?.trim() || null
   await prisma.adherent.update({
     where: { id: adherentId },
-    data:  { passager },
+    data:  {
+      statut:          input.statut,
+      ffessmForce:     input.ffessmForce,
+      // La note n'a de sens que si la validation est forcée
+      ffessmForceNote: input.ffessmForce ? note : null,
+    },
   })
   return { success: true }
 }

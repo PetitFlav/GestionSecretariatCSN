@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { encrypt, decrypt, keysMatch } from '@/lib/crypto'
 import { parseMembres } from '@/lib/parsers/membres'
 import { parsePaiements } from '@/lib/parsers/paiements'
-import { parseFFESSM, adressesDifferentes } from '@/lib/parsers/ffessm'
+import { parseFFESSM, adressesDifferentes, FFESSMRow } from '@/lib/parsers/ffessm'
 import { parseFormulaire, FormulaireRow } from '@/lib/parsers/formulaire'
 import { requireAuth } from '@/lib/session'
 
@@ -74,6 +74,17 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
   }
   const formulaireKeysMatched = new Set<string>()
 
+  // Index FFESSM par numéro de licence : « Licence » VPdive = « Identifiant »
+  // FFESSM (ex. A-18-805527). Jointure prioritaire — insensible aux écarts de
+  // nom (nom de naissance/d'usage, accents, particules…).
+  const normLicence = (l: string | null | undefined) =>
+    (l ?? '').toUpperCase().replace(/\s+/g, '').trim() || null
+  const ffessmByLicence = new Map<string, FFESSMRow>()
+  for (const row of ffessmMap.values()) {
+    const k = normLicence(row.ffessmId)
+    if (k) ffessmByLicence.set(k, row)
+  }
+
   if (membres.length === 0) {
     return { success: false, error: 'Aucun membre trouvé dans le fichier Membres' }
   }
@@ -90,8 +101,11 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
         }
       }
 
-      // Jointure avec FFESSM — idem
-      let ffessm = ffessmMap.get(membre.key)
+      // Jointure avec FFESSM — 1) numéro de licence, 2) nom+prénom exact,
+      // 3) variantes de nom (tiret/espace, ordre, mots concaténés)
+      const licenceKey = normLicence(membre.licence)
+      let ffessm = (licenceKey ? ffessmByLicence.get(licenceKey) : undefined)
+        ?? ffessmMap.get(membre.key)
       if (!ffessm) {
         for (const [k, v] of ffessmMap.entries()) {
           if (keysMatch(membre.key, k)) { ffessm = v; break }

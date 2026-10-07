@@ -46,13 +46,22 @@ model Adherent {
   licence           String?
   villeEnc          String?
   caci              String?
+  // DÉPRÉCIÉ — remplacé par `statut` (passager=true ⇒ statut=EXTERNE).
+  // Conservé le temps de la migration des données, à supprimer ensuite.
   passager          Boolean            @default(false)
+  statut            StatutAdherent     @default(LICENCIE)
+  // Déblocage manuel : la personne est bien licenciée FFESSM mais la jointure
+  // automatique ne la retrouve pas (nom divergent, licence mal saisie…).
+  ffessmForce       Boolean            @default(false)
+  ffessmForceNote   String?
   section           String?
   saison            Saison             @relation(fields: [saisonId], references: [id], onDelete: Cascade)
   attestationEmails AttestationEmail[]
   impressions       Impression[]
   rappelsCaci       RappelCaci[]
   validation        ValidationFFESSM?
+  // ISO "AAAA-MM-JJ" — VPdive "1ère inscription"
+  datePremiereInscription String?            
 
   @@unique([saisonId, nom, prenom])
   @@index([saisonId])
@@ -154,6 +163,12 @@ model RappelCaci {
   @@index([adherentId])
   @@index([saisonId])
   @@map("rappels_caci")
+}
+
+enum StatutAdherent {
+  LICENCIE  // licence + adhésion au CSN
+  EXTERNE   // adhésion CSN, licence prise dans un autre club
+  PASSAGER  // licence via le CSN, sans adhésion (pas d'accès aux entraînements)
 }
 
 enum PrintStatus {
