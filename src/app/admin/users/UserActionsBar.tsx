@@ -1,18 +1,34 @@
 'use client'
 
 import { useTransition, useState } from 'react'
-import { approveUserAction, disableUserAction } from '@/app/actions/auth'
+import { useRouter } from 'next/navigation'
+import { approveUserAction, disableUserAction, changeUserRoleAction } from '@/app/actions/auth'
 
 interface UserActionsBarProps {
   userId: string
   status: string
   currentRole: string
+  roles: string[]        // rôles que l'admin connecté a le droit d'attribuer
+  roleOptions: string[]  // rôles proposés pour un compte actif ([] = pas de changement possible)
 }
 
-export default function UserActionsBar({ userId, status, currentRole }: UserActionsBarProps) {
+const ROLE_LABELS: Record<string, string> = { USER: 'user', ADMIN: 'admin', SUPERUSER: 'superuser' }
+
+export default function UserActionsBar({ userId, status, currentRole, roles, roleOptions }: UserActionsBarProps) {
   const [isPending, startTransition] = useTransition()
   const [selectedRole, setSelectedRole] = useState(currentRole)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const router = useRouter()
+
+  function handleChangeRole() {
+    if (selectedRole === currentRole) return
+    if (!confirm(`Passer ce compte en « ${ROLE_LABELS[selectedRole]} » ?`)) return
+    startTransition(async () => {
+      const result = await changeUserRoleAction(userId, selectedRole as 'USER' | 'ADMIN')
+      setFeedback(result.error ?? result.success ?? null)
+      if (result.success) router.refresh() // met à jour le badge de rôle
+    })
+  }
 
   function handleApprove() {
     startTransition(async () => {
@@ -53,9 +69,9 @@ export default function UserActionsBar({ userId, status, currentRole }: UserActi
               color: 'var(--csn-navy)',
             }}
           >
-            <option value="USER">user</option>
-            <option value="ADMIN">admin</option>
-            <option value="SUPERUSER">superuser</option>
+            {roles.map(r => (
+              <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>
+            ))}
           </select>
           <button
             onClick={handleApprove}
@@ -75,6 +91,33 @@ export default function UserActionsBar({ userId, status, currentRole }: UserActi
             }}
           >
             Refuser
+          </button>
+        </>
+      )}
+
+      {status === 'ACTIVE' && roleOptions.length > 0 && (
+        <>
+          <select
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value)}
+            className="text-[11px] px-2 py-1 rounded border"
+            style={{
+              borderColor: 'var(--csn-border-strong)',
+              background: 'var(--csn-cream)',
+              color: 'var(--csn-navy)',
+            }}
+          >
+            {roleOptions.map(r => (
+              <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleChangeRole}
+            disabled={isPending || selectedRole === currentRole}
+            className="text-[11px] px-3 py-1 rounded text-white disabled:opacity-40 transition-opacity"
+            style={{ background: 'var(--csn-navy)' }}
+          >
+            {isPending ? '…' : 'Changer'}
           </button>
         </>
       )}

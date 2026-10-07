@@ -3,6 +3,7 @@ import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 import { prisma } from '@/lib/db'
 import UserActionsBar from './UserActionsBar'
+import { canManage, canChangeRole, assignableRoles, ROLE_CHANGE_OPTIONS, Role } from '@/lib/permissions'
 
 export default async function AdminUsersPage() {
   const currentUser = await getSessionUser()
@@ -14,6 +15,8 @@ export default async function AdminUsersPage() {
   ) {
     redirect('/')
   }
+
+  const actor = { id: currentUser.id, role: currentUser.role as Role }
 
   const users = await prisma.user.findMany({
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
@@ -44,7 +47,7 @@ export default async function AdminUsersPage() {
         {pending.length > 0 && (
           <Section title="En attente de validation">
             {pending.map((u) => (
-              <UserRow key={u.id} user={u} currentUserId={currentUser.id} />
+              <UserRow key={u.id} user={u} actor={actor} />
             ))}
           </Section>
         )}
@@ -55,7 +58,7 @@ export default async function AdminUsersPage() {
             <p className="text-[13px] text-slate-400 py-3">Aucun compte actif.</p>
           ) : (
             active.map((u) => (
-              <UserRow key={u.id} user={u} currentUserId={currentUser.id} />
+              <UserRow key={u.id} user={u} actor={actor} />
             ))
           )}
         </Section>
@@ -64,7 +67,7 @@ export default async function AdminUsersPage() {
         {disabled.length > 0 && (
           <Section title="Comptes désactivés">
             {disabled.map((u) => (
-              <UserRow key={u.id} user={u} currentUserId={currentUser.id} />
+              <UserRow key={u.id} user={u} actor={actor} />
             ))}
           </Section>
         )}
@@ -128,12 +131,14 @@ function statusPill(status: string) {
 
 function UserRow({
   user,
-  currentUserId,
+  actor,
 }: {
   user: { id: string; email: string; firstName: string; lastName: string; role: string; status: string; createdAt: Date }
-  currentUserId: string
+  actor: { id: string; role: Role }
 }) {
-  const isSelf = user.id === currentUserId
+  const isSelf = user.id === actor.id
+  const manageable = canManage(actor, { id: user.id, role: user.role as Role })
+  const roleEditable = canChangeRole(actor, { id: user.id, role: user.role as Role })
 
   return (
     <div
@@ -170,8 +175,10 @@ function UserRow({
       </div>
 
       {/* Actions */}
-      {!isSelf && (
+      {manageable && (
         <UserActionsBar
+          roles={assignableRoles(actor.role)}
+          roleOptions={roleEditable ? ROLE_CHANGE_OPTIONS : []}
           userId={user.id}
           status={user.status}
           currentRole={user.role}

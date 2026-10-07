@@ -4,8 +4,9 @@ import { redirect } from 'next/navigation'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { prisma } from '@/lib/db'
-import { getSession, getSessionUser } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { sendSetupEmail, sendApprovalNotificationEmail } from '@/lib/email'
+import { authorizeUserAdmin, assignableRoles, canChangeRole, ROLE_CHANGE_OPTIONS } from '@/lib/permissions'
 import {
   registerSchema,
   loginSchema,
@@ -196,9 +197,10 @@ export async function approveUserAction(
   userId: string,
   role: 'USER' | 'ADMIN' | 'SUPERUSER'
 ): Promise<ActionResult> {
-  const currentUser = await getSessionUser()
-  if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERUSER')) {
-    return { error: 'Accès refusé.' }
+  const auth = await authorizeUserAdmin(userId)
+  if (!auth.ok) return { error: auth.error }
+  if (!assignableRoles(auth.actor.role).includes(role)) {
+    return { error: 'Vous n’avez pas les droits pour attribuer ce rôle.' }
   }
 
   try {
@@ -215,7 +217,7 @@ export async function approveUserAction(
       },
     })
 
-    const res = await sendSetupEmail(user.email, token, currentUser.id)
+    const res = await sendSetupEmail(user.email, token, auth.actor.id)
     if (!res.sent) {
       return {
         error: `Compte approuvé, mais l'email n'est PAS parti (${res.reason}). ` +
@@ -233,10 +235,8 @@ export async function approveUserAction(
 // ─── Renvoi du lien de création de mot de passe (admin) ─────────────────────
 
 export async function resendSetupLinkAction(userId: string): Promise<ActionResult> {
-  const currentUser = await getSessionUser()
-  if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERUSER')) {
-    return { error: 'Accès refusé.' }
-  }
+  const auth = await authorizeUserAdmin(userId)
+  if (!auth.ok) return { error: auth.error }
 
   try {
     const token  = crypto.randomBytes(32).toString('hex')
@@ -247,7 +247,7 @@ export async function resendSetupLinkAction(userId: string): Promise<ActionResul
       data:  { setupToken: token, setupTokenExpiry: expiry },
     })
 
-    const res = await sendSetupEmail(user.email, token, currentUser.id)
+    const res = await sendSetupEmail(user.email, token, auth.actor.id)
     return res.sent
       ? { success: `Lien renvoyé à ${user.email}` }
       : { error: `Échec d'envoi (${res.reason}). Lien : ${res.link}` }
@@ -257,13 +257,43 @@ export async function resendSetupLinkAction(userId: string): Promise<ActionResul
   }
 }
 
+// ─── Changement de rôle (superuser uniquement) ───────────────────────────────
+
+export async function changeUserRoleAction(
+  userId: string,
+  role: 'USER' | 'ADMIN'
+): Promise<ActionResult> {
+  const auth = await authorizeUserAdmin(userId)
+  if (!auth.ok) return { error: auth.error }
+
+  if (!canChangeRole(auth.actor, auth.target)) {
+    return { error: 'Seul un superuser peut modifier le rôle de ce compte.' }
+  }
+  // Le type TypeScript ne protège pas : la valeur vient du navigateur
+  if (!ROLE_CHANGE_OPTIONS.includes(role)) {
+    return { error: 'Rôle non autorisé.' }
+  }
+  if (role === auth.target.role) {
+    return { success: 'Rôle inchangé.' }
+  }
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data:  { role },
+    })
+    return { success: `Rôle modifié : ${role === 'ADMIN' ? 'admin' : 'user'}` }
+  } catch (err) {
+    console.error('changeUserRoleAction:', err)
+    return { error: 'Une erreur est survenue.' }
+  }
+}
+
 // ─── Désactivation d'un utilisateur (admin) ──────────────────────────────────
 
 export async function disableUserAction(userId: string): Promise<ActionResult> {
-  const currentUser = await getSessionUser()
-  if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERUSER')) {
-    return { error: 'Accès refusé.' }
-  }
+  const auth = await authorizeUserAdmin(userId)
+  if (!auth.ok) return { error: auth.error }
 
   try {
     await prisma.user.update({
