@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateStatutAdherent } from '@/app/actions/adherents'
+import { updateStatutAdherent, updateLicenceAdherent } from '@/app/actions/adherents'
 import { STATUTS, STATUT_LABEL, STATUT_DESCRIPTION, Statut } from '@/lib/statut'
 
 const AGENT_URL       = 'http://localhost:3333'
@@ -222,6 +222,67 @@ export function StatutAdherentForm({
         {msg && (
           <span className="text-[12px]" style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>{msg.text}</span>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── LicenceForm ───────────────────────────────────────────────────────────────
+// Saisie manuelle du numéro de licence quand l'export VPdive ne le contient pas.
+export function LicenceForm({
+  adherentId, initialLicence,
+}: {
+  adherentId:     string
+  initialLicence: string | null
+}) {
+  const [licence, setLicence] = useState(initialLicence ?? '')
+  const [msg, setMsg]         = useState<{ ok: boolean; text: string } | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
+
+  const dirty = licence.trim().toUpperCase().replace(/\s+/g, '') !== (initialLicence ?? '')
+
+  function save() {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await updateLicenceAdherent(adherentId, licence)
+      setMsg(res.success
+        ? { ok: true,  text: 'Enregistré' }
+        : { ok: false, text: res.error ?? 'Erreur' })
+      if (res.success) router.refresh()
+    })
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5"
+      style={{ borderBottom: '0.5px solid var(--csn-border)' }}>
+      <span className="text-[12px] text-slate-400">N° de licence</span>
+      <div className="flex items-center gap-2">
+        {msg && (
+          <span className="text-[11px]" style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>{msg.text}</span>
+        )}
+        <input
+          type="text"
+          value={licence}
+          onChange={e => setLicence(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && dirty && !isPending) save() }}
+          placeholder="A-18-805527"
+          disabled={isPending}
+          className="w-[140px] px-2 py-1 text-[13px] rounded-lg outline-none font-medium"
+          style={{
+            border: '0.5px solid var(--csn-border-strong)',
+            background: 'var(--csn-cream)',
+            color: 'var(--csn-navy)',
+          }}
+        />
+        <button
+          onClick={save}
+          disabled={!dirty || isPending}
+          className="text-[12px] px-2.5 py-1 rounded-lg text-white transition-opacity disabled:opacity-40"
+          style={{ background: 'var(--csn-navy)' }}
+        >
+          {isPending ? '…' : 'OK'}
+        </button>
       </div>
     </div>
   )

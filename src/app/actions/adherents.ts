@@ -434,3 +434,24 @@ export async function updateStatutAdherent(
   })
   return { success: true }
 }
+
+// ── Licence saisie à la main ──────────────────────────────────────────────────
+// Certains exports VPdive arrivent sans numéro de licence. Saisie manuelle
+// conservée par l'import tant que VPdive n'en fournit pas un.
+
+export async function updateLicenceAdherent(
+  adherentId: string,
+  licence: string | null
+): Promise<{ success: boolean; error?: string }> {
+  await requireAuth()
+  // Même normalisation que la jointure FFESSM de l'import (majuscules, sans espaces)
+  const value = (licence ?? '').toUpperCase().replace(/\s+/g, '') || null
+  if (value && !/^[A-Z0-9-]{4,20}$/.test(value)) {
+    return { success: false, error: 'Format invalide (ex. : A-18-805527)' }
+  }
+  await prisma.adherent.update({
+    where: { id: adherentId },
+    data:  { licence: value },
+  })
+  return { success: true }
+}

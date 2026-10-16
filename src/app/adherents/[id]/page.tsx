@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 import { getAdherentDetail } from '@/app/actions/adherents'
-import { BoutonEtiquette, BoutonAttestation, StatutAdherentForm } from './AdherentButtons'
+import { BoutonEtiquette, BoutonAttestation, StatutAdherentForm, LicenceForm } from './AdherentButtons'
 import { StatutBadge } from '@/components/StatutBadge'
 import { peutAvoirEtiquette } from '@/lib/statut'
 
@@ -143,6 +143,7 @@ export default async function AdherentDetailPage({ params }: Props) {
 
         {/* FFESSM */}
         <Section title="FFESSM">
+          <LicenceForm adherentId={a.id} initialLicence={a.licence} />
           <Row label="Identifiant FFESSM" value={a.ffessmId} />
           <Row label="Statut validation"
             value={a.ffessmStatut
