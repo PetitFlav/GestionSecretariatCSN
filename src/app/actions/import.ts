@@ -93,6 +93,14 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
 
   for (const membre of membres) {
     try {
+      // Fiche existante cherchée d'abord : sa licence (éventuellement saisie à
+      // la main) sert de secours quand l'export VPdive n'en contient pas.
+      const existing = await prisma.adherent.findFirst({
+        where: { saisonId, nom: membre.nom, prenom: membre.prenom },
+      })
+      // VPdive fait foi s'il fournit une licence ; sinon on garde celle en base.
+      const licence = membre.licence?.trim() || existing?.licence || null
+
       // Jointure avec paiements — teste toutes les variantes tiret/espace
       let paiement = paiements.get(membre.key)
       if (!paiement) {
@@ -103,7 +111,7 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
 
       // Jointure avec FFESSM — 1) numéro de licence, 2) nom+prénom exact,
       // 3) variantes de nom (tiret/espace, ordre, mots concaténés)
-      const licenceKey = normLicence(membre.licence)
+      const licenceKey = normLicence(licence)
       let ffessm = (licenceKey ? ffessmByLicence.get(licenceKey) : undefined)
         ?? ffessmMap.get(membre.key)
       if (!ffessm) {
@@ -120,6 +128,14 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
       } else {
         for (const [k, v] of formulaireMap.entries()) {
           if (keysMatch(membre.key, k)) { formulaire = v; matchedFormKey = k; break }
+        }
+      }
+      if (!formulaire) {
+        // Secours : saisie de l'adhérent et nom↔prénom intervertis
+        for (const [k, v] of formulaireMap.entries()) {
+          if (v.altKeys.some(a => keysMatch(membre.key, a))) {
+            formulaire = v; matchedFormKey = k; break
+          }
         }
       }
       if (matchedFormKey) formulaireKeysMatched.add(matchedFormKey)
@@ -156,17 +172,14 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
         ? paiement.datesPaiement.join(' / ')
         : null
 
-      // Upsert adhérent (unique sur saisonId + nom + prenom)
-      const existing = await prisma.adherent.findFirst({
-        where: { saisonId, nom: membre.nom, prenom: membre.prenom },
-      })
-
+      // Upsert adhérent (unique sur saisonId + nom + prenom) — `existing`
+      // a été chargé en tête de boucle.
       const data = {
         saisonId,
         nom:             membre.nom,
         prenom:          membre.prenom,
         civilite:        membre.civilite,
-        licence:         membre.licence,
+        licence,
         dateExpiration:  membre.dateExpiration,
         caci:            membre.caci,
         montant,

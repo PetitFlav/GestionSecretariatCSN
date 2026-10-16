@@ -7,6 +7,9 @@ export interface FormulaireRow {
   sectionPrincipale: string | null      // ActivitePrincipale — canonicalisée
   sectionsSecondaires: string[]          // ActiviteSecondaire — peut être multi-lignes
   key: string
+  // Clés de secours : saisie de l'adhérent (NOM/PRENOM) + versions nom↔prénom
+  // inversées. Sert quand VPdive ou l'adhérent a interverti les deux champs.
+  altKeys: string[]
 }
 
 // ── Canonicalisation des libellés de section ─────────────────────────────────
@@ -69,6 +72,12 @@ export function parseFormulaire(buffer: ArrayBuffer): {
 
   const header = (rows[hdr] as unknown[]).map(c => String(c ?? '').trim())
   const idx = (name: string) => header.indexOf(name)
+  // "Nom"/"Prénom" (col. A/B) = identité de la fiche VPdive, la même que dans
+  // l'export Membres → clé de jointure principale. "NOM"/"PRENOM" (col. C/D) =
+  // ce que l'adhérent a tapé dans le formulaire (fautes, nom de jeune fille,
+  // champs intervertis…) → seulement en secours.
+  const iNomFiche = idx('Nom')
+  const iPrenomFiche = idx('Prénom')
   const iNom = idx('NOM')
   const iPrenom = idx('PRENOM')
   const iPrincipale = idx('ActivitePrincipale')
@@ -82,9 +91,22 @@ export function parseFormulaire(buffer: ArrayBuffer): {
     const r = rows[i] as unknown[]
     if (!r) continue
 
-    const nom = cleanName(String(r[iNom] ?? '').trim())
-    const prenom = cleanName(String(r[iPrenom] ?? '').trim())
+    const nomSaisi = cleanName(String(r[iNom] ?? '').trim())
+    const prenomSaisi = cleanName(String(r[iPrenom] ?? '').trim())
+    const nomFiche = iNomFiche === -1 ? '' : cleanName(String(r[iNomFiche] ?? '').trim())
+    const prenomFiche = iPrenomFiche === -1 ? '' : cleanName(String(r[iPrenomFiche] ?? '').trim())
+
+    const nom = nomFiche && prenomFiche ? nomFiche : nomSaisi
+    const prenom = nomFiche && prenomFiche ? prenomFiche : prenomSaisi
     if (!nom || !prenom) continue
+
+    const key = makeKey(nom, prenom)
+    const altKeys = Array.from(new Set([
+      makeKey(prenom, nom),
+      ...(nomSaisi && prenomSaisi
+        ? [makeKey(nomSaisi, prenomSaisi), makeKey(prenomSaisi, nomSaisi)]
+        : []),
+    ])).filter(k => k !== key)
 
     const sectionPrincipale = canonSection(r[iPrincipale])
 
@@ -96,12 +118,13 @@ export function parseFormulaire(buffer: ArrayBuffer): {
           .map(canonSection)
           .filter((x): x is string => Boolean(x))
 
-    formulaire.set(makeKey(nom, prenom), {
+    formulaire.set(key, {
       nom,
       prenom,
       sectionPrincipale,
       sectionsSecondaires,
-      key: makeKey(nom, prenom),
+      key,
+      altKeys,
     })
   }
 
