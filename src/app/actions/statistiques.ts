@@ -41,6 +41,20 @@ export interface StatsData {
   lignes:  StatLigne[]
 }
 
+// ── Regroupement de sections (statistiques uniquement) ───────────────────────
+// Certaines sections distinctes dans VPdive n'en forment qu'une au club.
+// Ne modifie PAS la base : seuls les comptages des stats sont fusionnés.
+// Pour en ajouter une : une ligne { re, label } de plus.
+const SECTIONS_REGROUPEES: { re: RegExp; label: string }[] = [
+  { re: /chasse|nage.*palme/i, label: 'Chasse / Nage avec palmes' },
+]
+
+function sectionStat(section: string | null | undefined): string | null {
+  const s = section?.trim()
+  if (!s) return null
+  return SECTIONS_REGROUPEES.find(g => g.re.test(s))?.label ?? s
+}
+
 // dateDebut est stockée en JJ/MM/AAAA
 function ordreSaison(dateDebut: string, fallback: Date): number {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dateDebut?.trim() ?? '')
@@ -77,7 +91,7 @@ export async function getStatsData(): Promise<StatsData> {
       continue
     }
     const sexe    = civiliteVersSexe(a.civilite)
-    const section = a.section?.trim() || null
+    const section = sectionStat(a.section)
     const key     = `${a.saisonId}|${section ?? ''}|${sexe}`
 
     const l = compteurs.get(key)
