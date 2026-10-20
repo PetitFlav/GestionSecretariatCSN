@@ -2,11 +2,13 @@
 
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
+import { decrypt } from '@/lib/crypto'
 import { civiliteVersSexe, estInvite, type Sexe } from '@/lib/sexe'
+import { trancheAge, type TrancheId } from '@/lib/ages'
 
 // ── Données brutes des statistiques ──────────────────────────────────────────
-// On renvoie des COMPTAGES déjà agrégés par (saison, section, sexe) : quelques
-// dizaines de lignes au maximum. Tout le filtrage (saison, section, mode
+// On renvoie des COMPTAGES déjà agrégés par (saison, section, sexe, tranche) : quelques
+// centaines de lignes au maximum. Tout le filtrage (saison, section, mode
 // évolution) se fait ensuite côté navigateur, sans aller-retour serveur —
 // l'écran reste fluide en AG même si le wifi est moyen une fois la page chargée.
 //
@@ -23,6 +25,7 @@ export interface StatSaison {
   id:          string
   label:       string
   isActive:    boolean
+  dateDebut:   string    // JJ/MM/AAAA — date pivot du calcul des âges
   ordre:       number    // AAAAMM de dateDebut — tri chronologique fiable
   hasSections: boolean   // au moins un adhérent avec une section renseignée
   total:       number
@@ -33,6 +36,7 @@ export interface StatLigne {
   saisonId: string
   section:  string | null
   sexe:     Sexe
+  tranche:  TrancheId
   count:    number
 }
 
@@ -68,8 +72,12 @@ export async function getStatsData(): Promise<StatsData> {
   const [saisons, adherents] = await Promise.all([
     prisma.saison.findMany(),
     // civilite et section ne sont PAS chiffrées → lecture directe.
+    // dateNaissance est chiffrée → déchiffrée ici, jamais renvoyée au client.
     prisma.adherent.findMany({
-      select: { saisonId: true, section: true, civilite: true, licence: true, dateExpiration: true },
+      select: {
+        saisonId: true, section: true, civilite: true, licence: true,
+        dateExpiration: true, dateNaissanceEnc: true,
+      },
     }),
   ])
 
@@ -81,6 +89,8 @@ export async function getStatsData(): Promise<StatsData> {
 
   // dateExpireLicence par saison (vide = pas de filtre, comme les listes)
   const expireParSaison = new Map(saisons.map(s => [s.id, s.dateExpireLicence?.trim() || null]))
+  // Date pivot de calcul de l'âge = début de saison (JJ/MM/AAAA)
+  const pivotParSaison  = new Map<string, string>(saisons.map(s => [s.id, s.dateDebut]))
 
   for (const a of adherents) {
     const expire = expireParSaison.get(a.saisonId)
@@ -92,11 +102,12 @@ export async function getStatsData(): Promise<StatsData> {
     }
     const sexe    = civiliteVersSexe(a.civilite)
     const section = sectionStat(a.section)
-    const key     = `${a.saisonId}|${section ?? ''}|${sexe}`
+    const tranche = trancheAge(decrypt(a.dateNaissanceEnc), pivotParSaison.get(a.saisonId))
+    const key     = `${a.saisonId}|${section ?? ''}|${sexe}|${tranche}`
 
     const l = compteurs.get(key)
     if (l) l.count++
-    else compteurs.set(key, { saisonId: a.saisonId, section, sexe, count: 1 })
+    else compteurs.set(key, { saisonId: a.saisonId, section, sexe, tranche, count: 1 })
 
     totalParSaison.set(a.saisonId, (totalParSaison.get(a.saisonId) ?? 0) + 1)
     if (section) saisonsAvecSect.add(a.saisonId)
@@ -108,6 +119,7 @@ export async function getStatsData(): Promise<StatsData> {
         id:          s.id,
         label:       s.label,
         isActive:    s.isActive,
+        dateDebut:   s.dateDebut,
         ordre:       ordreSaison(s.dateDebut, s.createdAt),
         hasSections: saisonsAvecSect.has(s.id),
         total:       totalParSaison.get(s.id) ?? 0,
