@@ -94,27 +94,53 @@ export default async function HomePage() {
 
         </div>
 
-        {/* Extractions O.M.S — pleine largeur */}
-        <Link
-          href="/extractions-oms"
-          className="flex items-center gap-4 rounded-xl px-5 py-4 bg-white transition-colors hover:bg-slate-50"
-          style={{ border: '0.5px solid var(--csn-border-strong)' }}
-        >
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--csn-light)' }}
+        {/* Statistiques (gauche) + Extractions O.M.S (droite) */}
+        <div className="grid grid-cols-2 gap-3">
+
+          {/* Statistiques */}
+          <Link
+            href="/statistiques"
+            className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-          </div>
-          <div>
-            <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Extractions O.M.S</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Exporter une saison pour l&apos;Office Municipal des Sports</div>
-          </div>
-        </Link>
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--csn-light)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+                <path d="M21.21 15.89A10 10 0 118 2.83"/>
+                <path d="M22 12A10 10 0 0012 2v10z"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Statistiques</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Graphiques par saison et section</div>
+            </div>
+          </Link>
+
+          {/* Extractions O.M.S */}
+          <Link
+            href="/extractions-oms"
+            className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}
+          >
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--csn-light)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Extractions O.M.S</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Export pour l&apos;Office Municipal des Sports</div>
+            </div>
+          </Link>
+
+        </div>
         
       </div>
     </AppLayout>
