@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
-import { requireAuth } from '@/lib/session'
+import { requireAuth, requireAdmin } from '@/lib/session'
+import { revalidatePath } from 'next/cache'
 import { Statut, isStatut, soumisControleFFESSM } from '@/lib/statut'
 import { estInvite, PAS_INVITE } from '@/lib/invite'
 
@@ -462,4 +463,74 @@ export async function updateLicenceAdherent(
     data:  { licence: value },
   })
   return { success: true }
+}
+
+// ── Suppression d'une fiche (administrateurs uniquement) ──────────────────────
+// Pour les fiches invalides (doublon créé par un nom/prénom inversé dans
+// VPdive, erreur de saisie…). Suppression DÉFINITIVE : la base supprime aussi
+// en cascade ses impressions, attestations envoyées, rappels CACI et sa
+// validation FFESSM.
+// ⚠ Si la fiche existe toujours telle quelle dans VPdive, le prochain import
+// la recréera : corriger la source d'abord.
+
+export interface ImpactSuppression {
+  ok:            boolean
+  error?:        string
+  nom?:          string
+  prenom?:       string
+  saison?:       string
+  impressions?:  number
+  attestations?: number
+  rappels?:      number
+}
+
+/** Ce qui partira avec la fiche — affiché dans la confirmation. */
+export async function getImpactSuppression(adherentId: string): Promise<ImpactSuppression> {
+  try {
+    await requireAdmin()
+    const a = await prisma.adherent.findUnique({
+      where:  { id: adherentId },
+      select: {
+        nom: true, prenom: true, saison: { select: { label: true } },
+        _count: { select: { impressions: true, attestationEmails: true, rappelsCaci: true } },
+      },
+    })
+    if (!a) return { ok: false, error: 'Fiche introuvable' }
+    return {
+      ok: true, nom: a.nom, prenom: a.prenom, saison: a.saison.label,
+      impressions:  a._count.impressions,
+      attestations: a._count.attestationEmails,
+      rappels:      a._count.rappelsCaci,
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * Supprime la fiche. `confirmation` doit reprendre le NOM de famille
+ * (casse et espaces ignorés) : garde-fou contre un clic sur la mauvaise ligne,
+ * vérifié côté serveur et pas seulement dans l'écran.
+ */
+export async function supprimerAdherent(
+  adherentId: string,
+  confirmation: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin()
+    const a = await prisma.adherent.findUnique({ where: { id: adherentId }, select: { nom: true } })
+    if (!a) return { ok: false, error: 'Fiche introuvable (déjà supprimée ?)' }
+
+    const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase()
+    if (norm(confirmation) !== norm(a.nom)) {
+      return { ok: false, error: 'Le nom saisi ne correspond pas à la fiche' }
+    }
+
+    await prisma.adherent.delete({ where: { id: adherentId } })
+    revalidatePath('/suivi')
+    revalidatePath('/adherents')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }

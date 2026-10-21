@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/session'
 import { getAdherentDetail } from '@/app/actions/adherents'
 import { BoutonEtiquette, BoutonAttestation, StatutAdherentForm, LicenceForm } from './AdherentButtons'
 import { StatutBadge } from '@/components/StatutBadge'
+import SupprimerAdherent from '@/components/SupprimerAdherent'
 import { peutAvoirEtiquette } from '@/lib/statut'
 
 interface Props {
@@ -193,6 +194,20 @@ export default async function AdherentDetailPage({ params }: Props) {
           )}
         </Section>
 
+
+        {/* Zone sensible — administrateurs uniquement */}
+        {(user.role === 'ADMIN' || user.role === 'SUPERUSER') && (
+          <div className="mt-8 rounded-xl p-4 flex items-center justify-between gap-4"
+            style={{ border: '0.5px solid #fca5a5', background: '#fff5f5' }}>
+            <div>
+              <div className="text-[13px] font-medium" style={{ color: '#9b1c1c' }}>Supprimer la fiche</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Fiche invalide (doublon, nom/prénom inversé…). Suppression définitive.
+              </div>
+            </div>
+            <SupprimerAdherent adherentId={a.id} apres="/adherents" />
+          </div>
+        )}
       </div>
     </AppLayout>
   )
