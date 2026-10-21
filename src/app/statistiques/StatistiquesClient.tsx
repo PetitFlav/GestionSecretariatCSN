@@ -18,6 +18,7 @@ const STATS = [
   { id: 'sexe', label: 'Répartition femmes / hommes' },
   { id: 'age',  label: "Répartition par tranche d'âge" },
   { id: 'reinscription', label: 'Taux de réinscription' },
+  { id: 'composition',   label: 'Sections : anciens / nouveaux' },
 ] as const
 type StatId = typeof STATS[number]['id']
 
@@ -117,7 +118,10 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
   const active = saisons.find(s => s.isActive) ?? saisons[saisons.length - 1]
 
   const [stat,     setStat]     = useState<StatId>('sexe')
-  const [mode,     setMode]     = useState<Mode>('saison')
+  const [modeChoisi, setMode]   = useState<Mode>('saison')
+  // « Anciens / nouveaux par section » : vue d'une saison uniquement pour
+  // l'instant (une seule saison a des sections). L'évolution viendra en 2028.
+  const mode: Mode = stat === 'composition' ? 'saison' : modeChoisi
   const [saisonId, setSaisonId] = useState(active.id)
   const [section,  setSection]  = useState<string>(TOUTES)
 
@@ -142,7 +146,9 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
   // en ont (sinon les non-réinscrits n'ont pas de section connue).
   const aSections = (id: string) => saisons.find(s => s.id === id)?.hasSections ?? false
   const reinscSaison = reinscriptions.find(r => r.saisonId === saison.id) ?? null
-  const sectionDisabled = stat === 'reinscription'
+  const sectionDisabled = stat === 'composition'
+    ? true                                   // la vue EST déjà découpée par section
+    : stat === 'reinscription'
     ? (mode === 'saison'
         ? !(reinscSaison && aSections(reinscSaison.saisonId) && aSections(reinscSaison.precedentId))
         : !(reinscriptions.length > 0 && reinscriptions.every(r => aSections(r.saisonId) && aSections(r.precedentId))))
@@ -232,7 +238,9 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
     : stat === 'age' ? "Tranches d'âge"
     : 'Réinscription'
   const titre =
-    stat === 'reinscription' && mode === 'saison'
+    stat === 'composition'
+      ? `Anciens et nouveaux par section — ${saison.label}`
+    : stat === 'reinscription' && mode === 'saison'
       ? (reinscSaison
           ? `Réinscription — ${labelSaison(reinscSaison.precedentId)} → ${saison.label} (${libelleSection})`
           : `Réinscription — ${saison.label}`)
@@ -283,6 +291,16 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
             : <Vide texte="Pas de saison précédente en base : la réinscription ne peut pas être calculée pour cette saison." />
         )}
 
+        {stat === 'composition' && (
+          !reinscSaison
+            ? <Vide texte="Pas de saison précédente en base : impossible de distinguer anciens et nouveaux pour cette saison." />
+            : !saison.hasSections
+              ? <Vide texte="Pas de sections enregistrées pour cette saison." />
+              : <CompositionSections r={reinscSaison}
+                  labelP={labelSaison(reinscSaison.precedentId)} labelN={saison.label}
+                  provisoire={saison.isActive} />
+        )}
+
         {stat === 'reinscription' && mode === 'evolution' && (
           <ReinscriptionEvolution reinscriptions={reinscriptions} section={sectionEff}
             labelSaison={labelSaison} />
@@ -304,8 +322,10 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
           </select>
         </Filtre>
 
-        <Filtre label="Affichage">
+        <Filtre label="Affichage"
+          hint={stat === 'composition' ? "Évolution disponible quand deux saisons consécutives auront des sections." : undefined}>
           <select value={mode} onChange={e => setMode(e.target.value as Mode)}
+            disabled={stat === 'composition'}
             className={selectCls} style={selectStyle}>
             <option value="saison">Saison choisie</option>
             <option value="evolution">Évolution année par année</option>
@@ -326,7 +346,8 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
         </Filtre>
 
         <Filtre label="Section"
-          hint={sectionDisabled ? 'Pas de sections enregistrées pour cette saison.' : undefined}>
+          hint={stat === 'composition' ? 'Cette vue affiche déjà toutes les sections.'
+            : sectionDisabled ? 'Pas de sections enregistrées pour cette saison.' : undefined}>
           <select value={sectionEff} onChange={e => setSection(e.target.value)}
             disabled={sectionDisabled}
             className={selectCls} style={selectStyle}>
@@ -756,6 +777,136 @@ function ReinscriptionEvolution({ reinscriptions, section, labelSaison }: {
       <p className="mt-2 text-[12px] text-slate-400 text-center">
         Chaque saison est comparée à la précédente ; le pourcentage est le taux de réinscription.
         La saison en cours est provisoire.
+      </p>
+    </div>
+  )
+}
+
+// ── Anciens / nouveaux par section ───────────────────────────────────────────
+// Répond à deux questions avec des données RÉELLES (section de la saison N,
+// connue pour les réinscrits comme pour les nouveaux) :
+//   - quelle section amène des nouveaux ?   → nombre de nouveaux par section
+//   - quelle section a une base solide ?    → part d'anciens dans la section
+// La perte par section (non-réinscrits) n'est PAS calculable tant que la
+// saison précédente n'a pas de sections : volontairement absente.
+
+// En dessous de cet effectif, une section n'est pas citée dans les constats
+// « base la plus solide / renouvellement le plus fort » : 3 anciens sur 3 =
+// 100 %, ce qui ne veut rien dire.
+const EFFECTIF_MIN_CONSTAT = 10
+const SANS_SECTION_LABEL = 'Sans section'
+
+interface LigneCompo {
+  section: string
+  REINSCRIT: number
+  NOUVEAU: number
+  total: number
+  anciens: number   // % d'anciens (réinscrits) dans la section
+}
+
+function CompositionSections({ r, labelP, labelN, provisoire }: {
+  r: StatReinscription; labelP: string; labelN: string; provisoire: boolean
+}) {
+  const parSection = new Map<string, LigneCompo>()
+  for (const l of r.lignes) {
+    if (l.type === 'PARTI') continue
+    const nom = l.section ?? SANS_SECTION_LABEL
+    const row = parSection.get(nom) ?? { section: nom, REINSCRIT: 0, NOUVEAU: 0, total: 0, anciens: 0 }
+    row[l.type] += l.count
+    row.total += l.count
+    parSection.set(nom, row)
+  }
+  const rows = Array.from(parSection.values())
+    .map(x => ({ ...x, anciens: x.total ? Math.round((x.REINSCRIT / x.total) * 100) : 0 }))
+    .sort((a, b) =>
+      (a.section === SANS_SECTION_LABEL ? 1 : 0) - (b.section === SANS_SECTION_LABEL ? 1 : 0)
+      || b.total - a.total)
+
+  if (rows.length === 0) return <Vide />
+
+  // ── Constats automatiques (sections nommées uniquement) ───────────────────
+  const nommees   = rows.filter(x => x.section !== SANS_SECTION_LABEL)
+  const nbNouveaux = rows.reduce((n, x) => n + x.NOUVEAU, 0)
+  const recruteur = [...nommees].sort((a, b) => b.NOUVEAU - a.NOUVEAU)[0]
+  const fiables   = nommees.filter(x => x.total >= EFFECTIF_MIN_CONSTAT)
+  const solide    = [...fiables].sort((a, b) => b.anciens - a.anciens)[0]
+  const renouvele = [...fiables].sort((a, b) => a.anciens - b.anciens)[0]
+
+  const hauteur = Math.max(300, rows.length * 64 + 70)
+
+  return (
+    <div>
+      <div style={{ height: hauteur }} className="mt-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 150, left: 8, bottom: 0 }}
+            barCategoryGap="26%">
+            <CartesianGrid horizontal={false} stroke="#e2e8f0" />
+            <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false}
+              tick={{ fontSize: 13, fill: '#94a3b8' }} />
+            <YAxis type="category" dataKey="section" width={210} tickLine={false}
+              axisLine={{ stroke: '#cbd5e1' }} tick={{ fontSize: 15, fill: '#1a3a5c' }} />
+            <Tooltip
+              cursor={{ fill: 'rgba(46,109,164,0.06)' }}
+              formatter={(v: number, n: string, item: { payload?: LigneCompo }) =>
+                [`${v} (${pct(v, item.payload?.total ?? 0)})`, n]}
+            />
+            <Legend iconType="circle" wrapperStyle={{ fontSize: 16 }} />
+            <Bar dataKey="REINSCRIT" name={`Anciens (déjà en ${labelP})`} stackId="a"
+              fill={COULEUR_REINSC.REINSCRIT} stroke="#ffffff" strokeWidth={2}>
+              <LabelList dataKey="REINSCRIT" position="center"
+                formatter={(v: number) => (v ? String(v) : '')}
+                style={{ fontSize: 15, fontWeight: 600, fill: '#ffffff' }} />
+            </Bar>
+            <Bar dataKey="NOUVEAU" name="Nouveaux" stackId="a"
+              fill={COULEUR_REINSC.NOUVEAU} stroke="#ffffff" strokeWidth={2} radius={[0, 4, 4, 0]}>
+              <LabelList dataKey="NOUVEAU" position="center"
+                formatter={(v: number) => (v ? String(v) : '')}
+                style={{ fontSize: 15, fontWeight: 600, fill: '#1a2e3f' }} />
+              {/* À droite de chaque barre : effectif total et part d'anciens */}
+              <LabelList dataKey="total" position="right"
+                content={(p) => {
+                  const { x, y, width, height, index } = p as {
+                    x?: number; y?: number; width?: number; height?: number; index?: number }
+                  const row = index != null ? rows[index] : undefined
+                  if (x == null || y == null || width == null || height == null || !row) return null
+                  return (
+                    <text x={x + width + 10} y={y + height / 2} dominantBaseline="middle"
+                      style={{ fontSize: 14, fill: '#475569' }}>
+                      {row.total} · <tspan style={{ fontWeight: 600, fill: '#1a3a5c' }}>{row.anciens} %</tspan> d&apos;anciens
+                    </text>
+                  )
+                }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Constats — lisibles par la salle sans décoder le graphe */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+        {recruteur && recruteur.NOUVEAU > 0 && (
+          <Tuile titre="Section qui recrute le plus" valeur={recruteur.section}
+            couleur={COULEUR_REINSC.NOUVEAU}
+            detail={`${recruteur.NOUVEAU} nouveaux, soit ${pct(recruteur.NOUVEAU, nbNouveaux)} des nouveaux du club`} />
+        )}
+        {solide && (
+          <Tuile titre="Base la plus solide" valeur={solide.section}
+            couleur={COULEUR_REINSC.REINSCRIT}
+            detail={`${solide.anciens} % d'anciens (${solide.REINSCRIT} sur ${solide.total})`} />
+        )}
+        {renouvele && renouvele !== solide && (
+          <Tuile titre="Renouvellement le plus fort" valeur={renouvele.section}
+            couleur={COULEUR_REINSC.NOUVEAU}
+            detail={`${100 - renouvele.anciens} % de nouveaux (${renouvele.NOUVEAU} sur ${renouvele.total})`} />
+        )}
+      </div>
+
+      <p className="mt-3 text-[12px] text-slate-400 text-center">
+        Anciens = déjà adhérents en {labelP} ; section = celle de {labelN}.
+        {' '}Constats calculés sur les sections d&apos;au moins {EFFECTIF_MIN_CONSTAT} adhérents.
+        {' '}Les départs par section ne sont pas calculables : {labelP} n&apos;a pas de sections.
+        {provisoire && <> Chiffres provisoires au {r.dateDonnees}, inscriptions en cours.</>}
+        {r.parNom > 0 && <> {r.parNom} ancien(s) rapproché(s) par nom.</>}
       </p>
     </div>
   )
