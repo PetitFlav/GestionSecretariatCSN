@@ -248,13 +248,6 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
       ? `${nomStat} — ${saison.label} (${libelleSection})`
       : `Évolution ${nomStat.toLowerCase()} par saison (${libelleSection})`
 
-  // Mention discrète des invités écartés (licence « INVITE »)
-  const nbInvites = mode === 'saison'
-    ? saison.invites
-    : saisons.reduce((n, s) => n + s.invites, 0)
-  const noteInvites = nbInvites > 0
-    ? `${nbInvites} invité(s) hors CSN exclu(s) des chiffres${mode === 'evolution' ? ' (toutes saisons)' : ''}.`
-    : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -306,9 +299,6 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
             labelSaison={labelSaison} />
         )}
 
-        {noteInvites && (
-          <p className="mt-3 text-[11px] text-slate-400 text-center">{noteInvites}</p>
-        )}
       </div>
 
       {/* ── Bandeau de filtres ────────────────────────────────────────────── */}
