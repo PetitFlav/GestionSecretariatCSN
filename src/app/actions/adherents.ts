@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { requireAuth } from '@/lib/session'
 import { Statut, isStatut, soumisControleFFESSM } from '@/lib/statut'
+import { estInvite, PAS_INVITE } from '@/lib/invite'
 
 export async function getSaisonActive() {
   return prisma.saison.findFirst({ where: { isActive: true } })
@@ -156,6 +157,9 @@ export async function getAdherentsAttestations(
       { prenom: { contains: s, mode: 'insensitive' } },
     ]
   }
+  // Invités : pas d'adhésion → pas d'attestation (cf. lib/invite.ts).
+  // AND car `where.OR` est déjà pris par la recherche nom/prénom.
+  where.AND = [PAS_INVITE]
   if (filters.attestation === 'oui') where.attestationEmails = { some: {} }
   if (filters.attestation === 'non') where.attestationEmails = { none: {} }
 
@@ -229,7 +233,7 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
     ? { saisonId, dateExpiration: saison.dateExpireLicence }
     : { saisonId }  // fallback si dateExpireLicence non renseignée
 
-  const adherents = await prisma.adherent.findMany({
+  const adherents = (await prisma.adherent.findMany({
     where:   whereAdherents,
     orderBy: [{ nom: 'asc' }, { prenom: 'asc' }],
     select: {
@@ -238,7 +242,11 @@ export async function getSuivi(saisonId: string): Promise<SuiviResult> {
       statut: true, ffessmForce: true, ffessmForceNote: true,
       adresseEnc: true, codePostalEnc: true, villeEnc: true,
     },
-  })
+  }))
+    // Invités (licence « INVITE ») : pas membres du CSN → hors suivi.
+    // Sinon ils remontent en faux positifs (« non enregistrés FFESSM »…) et
+    // faussent le compteur d'assurés. Même règle que les statistiques.
+    .filter(a => !estInvite(a.licence))
 
   const now = Date.now()
   const caciExpires:         AlerteCaci[]   = []

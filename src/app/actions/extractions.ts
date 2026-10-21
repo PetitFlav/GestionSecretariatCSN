@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { requireAuth } from '@/lib/session'
+import { PAS_INVITE } from '@/lib/invite'
 import * as XLSX from 'xlsx'
 
 export interface OmsExtractionResult {
@@ -137,9 +138,10 @@ export async function extractionOms(saisonId: string): Promise<OmsExtractionResu
   // Filtre : membres actifs de la saison (dateExpiration === dateExpireLicence).
   // C'est ce qui permet de sortir une saison passée sans être écrasé,
   // contrairement à VPdive. Tous les statuts (licenciés, externes, passagers) sont inclus.
+  // Les invités (accompagnants, hors club) sont exclus — cf. lib/invite.ts.
   const where = saison.dateExpireLicence
-    ? { saisonId, dateExpiration: saison.dateExpireLicence }
-    : { saisonId }
+    ? { saisonId, dateExpiration: saison.dateExpireLicence, ...PAS_INVITE }
+    : { saisonId, ...PAS_INVITE }
 
   const adherents = await prisma.adherent.findMany({
     where,

@@ -3,7 +3,8 @@
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
 import { decrypt, makeKey, keysMatch } from '@/lib/crypto'
-import { civiliteVersSexe, estInvite, type Sexe } from '@/lib/sexe'
+import { civiliteVersSexe, type Sexe } from '@/lib/sexe'
+import { estInvite } from '@/lib/invite'
 import { trancheAge, type TrancheId } from '@/lib/ages'
 
 // ── Données brutes des statistiques ──────────────────────────────────────────
