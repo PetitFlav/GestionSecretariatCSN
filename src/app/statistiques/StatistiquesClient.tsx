@@ -7,7 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
   Tooltip, Legend,
 } from 'recharts'
-import type { StatsData, StatLigne } from '@/app/actions/statistiques'
+import type { StatsData, StatLigne, StatReinscription, TypeReinscription } from '@/app/actions/statistiques'
 import { SEXE_LABEL, type Sexe } from '@/lib/sexe'
 import { TRANCHE_LABEL, ORDRE_TRANCHES, type TrancheId } from '@/lib/ages'
 
@@ -17,6 +17,7 @@ import { TRANCHE_LABEL, ORDRE_TRANCHES, type TrancheId } from '@/lib/ages'
 const STATS = [
   { id: 'sexe', label: 'Répartition femmes / hommes' },
   { id: 'age',  label: "Répartition par tranche d'âge" },
+  { id: 'reinscription', label: 'Taux de réinscription' },
 ] as const
 type StatId = typeof STATS[number]['id']
 
@@ -33,6 +34,19 @@ const COULEUR: Record<Sexe, string> = {
   NR: '#94a3b8',
 }
 const ORDRE_SEXE: Sexe[] = ['F', 'H', 'NR']
+
+// Réinscription — palette validée (contraste + daltonisme). Le vert passe
+// sous 3:1 sur blanc : compensé par les chiffres écrits sur chaque segment.
+const COULEUR_REINSC: Record<TypeReinscription, string> = {
+  REINSCRIT: '#2a78d6',
+  NOUVEAU:   '#1baf7a',
+  PARTI:     '#eb6834',
+}
+const LABEL_REINSC: Record<TypeReinscription, string> = {
+  REINSCRIT: 'Réinscrits',
+  NOUVEAU:   'Nouveaux',
+  PARTI:     'Non réinscrits',
+}
 
 // Âges — une saison : un seul bleu (une seule série), gris pour NR.
 const COULEUR_AGE    = '#2a78d6'
@@ -99,7 +113,7 @@ function filtreSection(l: StatLigne, section: string): boolean {
 // ── Composant ────────────────────────────────────────────────────────────────
 
 export default function StatistiquesClient({ data }: { data: StatsData }) {
-  const { saisons, lignes } = data
+  const { saisons, lignes, reinscriptions } = data
   const active = saisons.find(s => s.isActive) ?? saisons[saisons.length - 1]
 
   const [stat,     setStat]     = useState<StatId>('sexe')
@@ -124,9 +138,17 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
 
   // Section grisée : saison sans sections (mode saison) ou aucune saison
   // n'en a (mode évolution).
-  const sectionDisabled = mode === 'saison'
-    ? !saison.hasSections
-    : !saisons.some(s => s.hasSections)
+  // Réinscription : la section n'a de sens que si les DEUX saisons comparées
+  // en ont (sinon les non-réinscrits n'ont pas de section connue).
+  const aSections = (id: string) => saisons.find(s => s.id === id)?.hasSections ?? false
+  const reinscSaison = reinscriptions.find(r => r.saisonId === saison.id) ?? null
+  const sectionDisabled = stat === 'reinscription'
+    ? (mode === 'saison'
+        ? !(reinscSaison && aSections(reinscSaison.saisonId) && aSections(reinscSaison.precedentId))
+        : !(reinscriptions.length > 0 && reinscriptions.every(r => aSections(r.saisonId) && aSections(r.precedentId))))
+    : mode === 'saison'
+      ? !saison.hasSections
+      : !saisons.some(s => s.hasSections)
   const sectionEff = sectionDisabled ? TOUTES : section
 
   // ── Données camembert (une saison) ─────────────────────────────────────────
@@ -205,10 +227,18 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
     : sectionEff === SANS_SECTION ? 'sans section'
     : sectionEff
 
-  const nomStat = stat === 'sexe' ? 'Femmes / hommes' : "Tranches d'âge"
-  const titre = mode === 'saison'
-    ? `${nomStat} — ${saison.label} (${libelleSection})`
-    : `Évolution ${nomStat.toLowerCase()} par saison (${libelleSection})`
+  const labelSaison = (id: string) => saisons.find(s => s.id === id)?.label ?? '?'
+  const nomStat = stat === 'sexe' ? 'Femmes / hommes'
+    : stat === 'age' ? "Tranches d'âge"
+    : 'Réinscription'
+  const titre =
+    stat === 'reinscription' && mode === 'saison'
+      ? (reinscSaison
+          ? `Réinscription — ${labelSaison(reinscSaison.precedentId)} → ${saison.label} (${libelleSection})`
+          : `Réinscription — ${saison.label}`)
+    : mode === 'saison'
+      ? `${nomStat} — ${saison.label} (${libelleSection})`
+      : `Évolution ${nomStat.toLowerCase()} par saison (${libelleSection})`
 
   // Mention discrète des invités écartés (licence « INVITE »)
   const nbInvites = mode === 'saison'
@@ -243,6 +273,19 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
         {stat === 'age' && mode === 'evolution' && (
           <AgeEvolution rows={agesEvo.rows} series={agesEvo.series}
             totParSaison={agesEvo.totParSaison} exclues={agesEvo.exclues} />
+        )}
+
+        {stat === 'reinscription' && mode === 'saison' && (
+          reinscSaison
+            ? <ReinscriptionSaison r={reinscSaison} section={sectionEff}
+                labelP={labelSaison(reinscSaison.precedentId)} labelN={saison.label}
+                provisoire={saison.isActive} />
+            : <Vide texte="Pas de saison précédente en base : la réinscription ne peut pas être calculée pour cette saison." />
+        )}
+
+        {stat === 'reinscription' && mode === 'evolution' && (
+          <ReinscriptionEvolution reinscriptions={reinscriptions} section={sectionEff}
+            labelSaison={labelSaison} />
         )}
 
         {noteInvites && (
@@ -316,10 +359,10 @@ function Filtre({ label, hint, children }: { label: string; hint?: string; child
   )
 }
 
-function Vide() {
+function Vide({ texte = 'Aucun adhérent pour cette sélection.' }: { texte?: string }) {
   return (
-    <div className="h-[520px] flex items-center justify-center text-[13px] text-slate-400">
-      Aucun adhérent pour cette sélection.
+    <div className="h-[520px] flex items-center justify-center text-[13px] text-slate-400 text-center px-6">
+      {texte}
     </div>
   )
 }
@@ -539,6 +582,180 @@ function AgeEvolution({ rows, series, totParSaison, exclues }: {
         Âge calculé au début de chaque saison.
         {exclues.length > 0 && <> Saison(s) sans données de section, non affichée(s) avec ce filtre : {exclues.join(', ')}.</>}
         {rows.some(r => series.some(s => masque(Number(r[s.id] ?? 0)))) && <> <NoteSeuil /></>}
+      </p>
+    </div>
+  )
+}
+
+// ── Réinscription ────────────────────────────────────────────────────────────
+
+const TYPES_REINSC: TypeReinscription[] = ['REINSCRIT', 'NOUVEAU', 'PARTI']
+
+function totauxReinsc(r: StatReinscription, section: string): Record<TypeReinscription, number> {
+  const t: Record<TypeReinscription, number> = { REINSCRIT: 0, NOUVEAU: 0, PARTI: 0 }
+  for (const l of r.lignes) {
+    const ok = section === TOUTES ? true
+      : section === SANS_SECTION ? l.section === null
+      : l.section === section
+    if (ok) t[l.type] += l.count
+  }
+  return t
+}
+
+/** Taux = réinscrits / effectif de la saison précédente. */
+function taux(t: Record<TypeReinscription, number>): number | null {
+  const base = t.REINSCRIT + t.PARTI
+  return base ? Math.round((t.REINSCRIT / base) * 100) : null
+}
+
+function Tuile({ titre, valeur, detail, couleur, grande }: {
+  titre: string; valeur: string; detail?: string; couleur?: string; grande?: boolean
+}) {
+  return (
+    <div className="rounded-xl px-4 py-3 flex flex-col gap-1"
+      style={{ background: grande ? 'var(--csn-light)' : 'var(--csn-cream)', border: '0.5px solid var(--csn-border)' }}>
+      <div className="text-[12px] text-slate-500 flex items-center gap-1.5">
+        {couleur && <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: couleur }} />}
+        {titre}
+      </div>
+      <div className={grande ? 'text-[40px] leading-none font-semibold' : 'text-[28px] leading-none font-semibold'}
+        style={{ color: 'var(--csn-navy)' }}>
+        {valeur}
+      </div>
+      {detail && <div className="text-[12px] text-slate-500">{detail}</div>}
+    </div>
+  )
+}
+
+// Étiquette d'axe sur deux lignes : saison + effectif total
+function TickSaison(props: { x?: number; y?: number; payload?: { value?: string }; totaux: Record<string, number> }) {
+  const { x = 0, y = 0, payload, totaux } = props
+  const label = payload?.value ?? ''
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text dy={18} textAnchor="middle" style={{ fontSize: 15, fill: '#1a3a5c', fontWeight: 500 }}>{label}</text>
+      <text dy={38} textAnchor="middle" style={{ fontSize: 13, fill: '#64748b' }}>
+        {totaux[label] ?? 0} adhérents
+      </text>
+    </g>
+  )
+}
+
+function ReinscriptionSaison({ r, section, labelP, labelN, provisoire }: {
+  r: StatReinscription; section: string; labelP: string; labelN: string; provisoire: boolean
+}) {
+  const t = totauxReinsc(r, section)
+  const tx = taux(t)
+  const effP = t.REINSCRIT + t.PARTI
+  const effN = t.REINSCRIT + t.NOUVEAU
+  if (effP + effN === 0) return <Vide />
+
+  // Deux colonnes empilées : P = réinscrits + non réinscrits ; N = réinscrits + nouveaux.
+  // Le bloc bleu « réinscrits » est le même des deux côtés : c'est le pont entre les saisons.
+  // undefined (et pas 0) pour la catégorie absente : l'infobulle l'ignore.
+  const rows = [
+    { label: labelP, REINSCRIT: t.REINSCRIT, PARTI: t.PARTI, NOUVEAU: undefined },
+    { label: labelN, REINSCRIT: t.REINSCRIT, PARTI: undefined, NOUVEAU: t.NOUVEAU },
+  ]
+  const totaux: Record<string, number> = { [labelP]: effP, [labelN]: effN }
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+        <Tuile grande titre="Taux de réinscription" valeur={tx === null ? '—' : `${tx} %`}
+          detail={`${t.REINSCRIT} sur ${effP} adhérents ${labelP}`} />
+        <Tuile titre="Réinscrits" valeur={String(t.REINSCRIT)} couleur={COULEUR_REINSC.REINSCRIT}
+          detail={`présents en ${labelP} et ${labelN}`} />
+        <Tuile titre="Nouveaux" valeur={String(t.NOUVEAU)} couleur={COULEUR_REINSC.NOUVEAU}
+          detail={effN ? `${pct(t.NOUVEAU, effN)} de l'effectif ${labelN}` : undefined} />
+        <Tuile titre={provisoire ? 'Pas encore réinscrits' : 'Non réinscrits'} valeur={String(t.PARTI)}
+          couleur={COULEUR_REINSC.PARTI}
+          detail={effP ? `${pct(t.PARTI, effP)} de l'effectif ${labelP}` : undefined} />
+      </div>
+
+      <div className="h-[420px] mt-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} layout="horizontal" margin={{ top: 10, right: 16, left: 0, bottom: 30 }}
+            barCategoryGap="28%">
+            <CartesianGrid vertical={false} stroke="#e2e8f0" />
+            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#cbd5e1' }} interval={0}
+              tick={(p: object) => <TickSaison {...p} totaux={totaux} />} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false}
+              tick={{ fontSize: 13, fill: '#94a3b8' }} />
+            <Tooltip
+              cursor={{ fill: 'rgba(46,109,164,0.06)' }}
+              formatter={(v: number, n: string, item: { payload?: { label?: string } }) => {
+                const tot = totaux[item.payload?.label ?? ''] ?? 0
+                return [`${v} (${pct(v, tot)})`, n]
+              }}
+            />
+            <Legend iconType="circle" wrapperStyle={{ fontSize: 16, paddingTop: 24 }} />
+            {(['REINSCRIT', 'PARTI', 'NOUVEAU'] as TypeReinscription[]).map((ty, i, arr) => (
+              <Bar key={ty} dataKey={ty} name={provisoire && ty === 'PARTI' ? 'Pas encore réinscrits' : LABEL_REINSC[ty]}
+                stackId="a" fill={COULEUR_REINSC[ty]} stroke="#ffffff" strokeWidth={2}
+                radius={i === arr.length - 1 || ty !== 'REINSCRIT' ? [4, 4, 0, 0] : [0, 0, 0, 0]}>
+                <LabelList dataKey={ty} position="center"
+                  formatter={(v: number) => (v ? String(v) : '')}
+                  style={{ fontSize: 16, fontWeight: 600, fill: ty === 'REINSCRIT' ? '#ffffff' : '#1a2e3f' }} />
+              </Bar>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <p className="mt-2 text-[12px] text-slate-400 text-center">
+        {provisoire
+          ? <>Chiffres provisoires au {r.dateDonnees} : les réinscriptions {labelN} se poursuivent. </>
+          : <>Données au {r.dateDonnees}. </>}
+        Taux = réinscrits ÷ effectif {labelP}.
+        {r.parNom > 0 && <> {r.parNom} réinscrit(s) rapproché(s) par nom, faute de numéro de licence commun.</>}
+      </p>
+    </div>
+  )
+}
+
+function ReinscriptionEvolution({ reinscriptions, section, labelSaison }: {
+  reinscriptions: StatReinscription[]; section: string; labelSaison: (id: string) => string
+}) {
+  if (reinscriptions.length === 0) {
+    return <Vide texte="Il faut au moins deux saisons en base pour calculer une réinscription." />
+  }
+
+  const rows = reinscriptions.map(r => {
+    const t = totauxReinsc(r, section)
+    const tx = taux(t)
+    return {
+      label: `${labelSaison(r.saisonId)}${tx === null ? '' : ` · ${tx} %`}`,
+      ...t,
+      effP: t.REINSCRIT + t.PARTI,
+      effN: t.REINSCRIT + t.NOUVEAU,
+    }
+  })
+
+  return (
+    <div>
+      <div className="h-[520px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 24, right: 16, left: 0, bottom: 0 }}
+            barGap={2} barCategoryGap="30%">
+            <CartesianGrid vertical={false} stroke="#e2e8f0" />
+            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#cbd5e1' }}
+              tick={{ fontSize: 15, fill: '#475569' }} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false}
+              tick={{ fontSize: 13, fill: '#94a3b8' }} />
+            <Tooltip cursor={{ fill: 'rgba(46,109,164,0.06)' }} />
+            <Legend iconType="circle" wrapperStyle={{ fontSize: 16 }} />
+            {TYPES_REINSC.map(ty => (
+              <Bar key={ty} dataKey={ty} name={LABEL_REINSC[ty]} fill={COULEUR_REINSC[ty]} radius={[4, 4, 0, 0]}>
+                <LabelList dataKey={ty} position="top" style={{ fontSize: 14, fill: '#475569' }} />
+              </Bar>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-[12px] text-slate-400 text-center">
+        Chaque saison est comparée à la précédente ; le pourcentage est le taux de réinscription.
+        La saison en cours est provisoire.
       </p>
     </div>
   )
