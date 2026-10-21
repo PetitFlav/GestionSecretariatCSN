@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { creerSaison, activerSaison } from '@/app/actions/import'
+import { definirDateAG, getInfoPhotoAG, prendrePhotoAG } from '@/app/actions/saisons-ag'
 
 interface Saison {
   id: string
@@ -11,6 +12,9 @@ interface Saison {
   dateFin: string
   dateExpireLicence: string
   createdAt: Date
+  dateAG: string | null          // JJ/MM/AAAA
+  datePhotoAG: Date | null
+  nbPhotoAG: number | null
 }
 
 export default function SaisonsClient({ saisons: initial }: { saisons: Saison[] }) {
@@ -113,6 +117,19 @@ export default function SaisonsClient({ saisons: initial }: { saisons: Saison[] 
                 <div className="text-[11px] text-slate-400 mt-0.5">
                   {s.dateDebut} → {s.dateFin} — licence jusqu&apos;au {s.dateExpireLicence}
                 </div>
+                {/* Saisons non actives : rappel en lecture seule */}
+                {!s.isActive && (s.dateAG || s.datePhotoAG) && (
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {s.dateAG && <>AG le {s.dateAG}</>}
+                    {s.dateAG && s.datePhotoAG && ' — '}
+                    {s.datePhotoAG && <>photo pré-AG du {fmtDateHeure(s.datePhotoAG)} ({s.nbPhotoAG} adhérents)</>}
+                  </div>
+                )}
+                {/* Saison active : date d'AG + photo pré-AG */}
+                {s.isActive && (
+                  <BlocAG saison={s}
+                    onChange={maj => setSaisons(prev => prev.map(x => (x.id === s.id ? { ...x, ...maj } : x)))} />
+                )}
               </div>
               {!s.isActive && (
                 <button
@@ -234,6 +251,180 @@ export default function SaisonsClient({ saisons: initial }: { saisons: Saison[] 
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Assemblée générale & photo « inscrits pré-AG » ───────────────────────────
+
+const champStyle = {
+  border: '0.5px solid var(--csn-border-strong)', background: 'var(--csn-cream)', color: 'var(--csn-navy)',
+}
+
+function fmtDateHeure(d: Date | string): string {
+  return new Date(d).toLocaleString('fr-FR', {
+    timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+/** « JJ/MM/AAAA » → « AAAA-MM-JJ » pour l'input date. */
+function frVersIso(fr: string | null): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(fr ?? '')
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : ''
+}
+
+/** Jours entre aujourd'hui et la date d'AG (négatif = passée). */
+function joursAvantAG(fr: string | null): number | null {
+  const iso = frVersIso(fr)
+  if (!iso) return null
+  const ag = new Date(iso + 'T00:00:00')
+  const auj = new Date(); auj.setHours(0, 0, 0, 0)
+  return Math.round((ag.getTime() - auj.getTime()) / 86_400_000)
+}
+
+function BlocAG({ saison, onChange }: {
+  saison: Saison
+  onChange: (maj: Partial<Saison>) => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [dateIso, setDateIso] = useState(frVersIso(saison.dateAG))
+  const [apercu, setApercu]   = useState<{ actifs: number; derniereMaj: string | null } | null>(null)
+  const [msg, setMsg]         = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  const jours     = joursAvantAG(saison.dateAG)
+  const photoPrise = !!saison.datePhotoAG
+  const dateModifiee = dateIso !== frVersIso(saison.dateAG)
+
+  function enregistrerDate() {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await definirDateAG(saison.id, dateIso)
+      if (res.ok) onChange({ dateAG: res.dateAG ?? null })
+      else setMsg({ type: 'err', text: res.error ?? 'Erreur' })
+    })
+  }
+
+  // Étape 1 : aperçu (nombre de fiches + date du dernier import) avant de figer
+  function preparerPhoto() {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await getInfoPhotoAG(saison.id)
+      if (res.ok) setApercu({ actifs: res.actifs ?? 0, derniereMaj: res.derniereMaj ?? null })
+      else setMsg({ type: 'err', text: res.error ?? 'Erreur' })
+    })
+  }
+
+  // Étape 2 : confirmation
+  function confirmerPhoto() {
+    startTransition(async () => {
+      const res = await prendrePhotoAG(saison.id)
+      setApercu(null)
+      if (res.ok) {
+        onChange({ datePhotoAG: new Date(), nbPhotoAG: res.nb ?? null })
+        setMsg({ type: 'ok', text: `${res.nb} adhérents figés comme inscrits pré-AG (${res.date}).` })
+      } else {
+        setMsg({ type: 'err', text: res.error ?? 'Erreur' })
+      }
+    })
+  }
+
+  // Rappel : AG dans 7 jours ou moins (ou passée) et photo pas encore prise
+  const rappel = !photoPrise && jours !== null && jours <= 7
+    ? (jours < 0
+        ? { fond: '#fdecec', bord: '#f3b4b4', texte: '#9b1c1c', msg: `AG passée depuis ${-jours} jour(s) et photo pré-AG non prise.` }
+        : { fond: '#fff8e6', bord: '#e8c96a', texte: '#7a5a00',
+            msg: jours === 0 ? "AG aujourd'hui — photo pré-AG non prise." : `AG dans ${jours} jour(s) — pensez à la photo pré-AG (après un import frais).` })
+    : null
+
+  return (
+    <div className="mt-3 rounded-lg p-3 flex flex-col gap-3"
+      style={{ background: 'var(--csn-cream)', border: '0.5px solid var(--csn-border)' }}>
+
+      {/* Date de l'AG */}
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="text-[11px] text-slate-500 mb-1 block">Date de l&apos;assemblée générale</label>
+          <input type="date" value={dateIso} onChange={e => setDateIso(e.target.value)}
+            className="px-3 py-1.5 text-[13px] rounded-lg outline-none bg-white" style={champStyle} />
+        </div>
+        {dateModifiee && (
+          <button onClick={enregistrerDate} disabled={isPending}
+            className="text-[12px] px-3 py-1.5 rounded-lg text-white disabled:opacity-60"
+            style={{ background: 'var(--csn-navy)' }}>
+            Enregistrer
+          </button>
+        )}
+      </div>
+
+      {rappel && (
+        <div className="rounded-lg px-3 py-2 text-[12px]"
+          style={{ background: rappel.fond, border: `0.5px solid ${rappel.bord}`, color: rappel.texte }}>
+          {rappel.msg}
+        </div>
+      )}
+
+      {/* Photo pré-AG */}
+      <div className="flex flex-col gap-2">
+        <div className="text-[12px]" style={{ color: 'var(--csn-navy)' }}>
+          <span className="font-medium">Photo « inscrits pré-AG »</span>
+          {photoPrise
+            ? <span className="text-slate-500"> — prise le {fmtDateHeure(saison.datePhotoAG!)} · {saison.nbPhotoAG} adhérents figés</span>
+            : <span className="text-slate-400"> — pas encore prise</span>}
+        </div>
+        <p className="text-[11px] text-slate-400">
+          À faire la veille de l&apos;AG, juste après un import VPdive : fige la liste des membres
+          actifs pour comparer l&apos;an prochain les saisons à la même étape. Les imports
+          suivants ne modifient pas cette photo.
+        </p>
+
+        {!apercu && (
+          <div>
+            <button onClick={preparerPhoto} disabled={isPending}
+              className="text-[12px] px-3 py-1.5 rounded-lg border transition-colors hover:bg-white disabled:opacity-60"
+              style={{ borderColor: 'var(--csn-border-strong)', color: 'var(--csn-navy)' }}>
+              {photoPrise ? 'Refaire la photo pré-AG…' : 'Figer les inscrits pré-AG…'}
+            </button>
+          </div>
+        )}
+
+        {/* Confirmation avec aperçu */}
+        {apercu && (
+          <div className="rounded-lg p-3 text-[12px] bg-white flex flex-col gap-2"
+            style={{ border: '0.5px solid var(--csn-border-strong)', color: '#1a2e3f' }}>
+            <div>
+              <strong>{apercu.actifs}</strong> adhérents actifs vont être figés (invités exclus).
+            </div>
+            <div className="text-slate-500">
+              Dernier import / mise à jour des fiches : <strong>{apercu.derniereMaj ?? 'inconnu'}</strong>.
+              {' '}Si ce n&apos;est pas récent, faites d&apos;abord un import VPdive.
+            </div>
+            {photoPrise && (
+              <div style={{ color: '#7a5a00' }}>
+                ⚠ Une photo existe déjà : elle sera remplacée.
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={confirmerPhoto} disabled={isPending}
+                className="text-[12px] px-3 py-1.5 rounded-lg text-white disabled:opacity-60"
+                style={{ background: 'var(--csn-navy)' }}>
+                {isPending ? 'En cours…' : 'Confirmer la photo'}
+              </button>
+              <button onClick={() => setApercu(null)} disabled={isPending}
+                className="text-[12px] px-3 py-1.5 rounded-lg border hover:bg-slate-50"
+                style={{ borderColor: 'var(--csn-border-strong)', color: 'var(--csn-navy)' }}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
+        {msg && (
+          <div className="text-[12px]" style={{ color: msg.type === 'ok' ? '#1a6642' : '#9b1c1c' }}>
+            {msg.text}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

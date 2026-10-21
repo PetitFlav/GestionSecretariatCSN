@@ -42,6 +42,9 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
   const saison = await prisma.saison.findUnique({ where: { id: saisonId } })
   if (!saison) return { success: false, error: 'Saison introuvable' }
 
+  // Date de constat des activations pour tout cet import (cf. dateActivation)
+  const maintenant = new Date()
+
   const allErrors: string[] = []
   let crees = 0, misAJour = 0, ignores = 0, desyncsFFESSM = 0, sectionsNonAssociees = 0
 
@@ -172,9 +175,22 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
         ? paiement.datesPaiement.join(' / ')
         : null
 
+      // Date d'activation : posée UNE fois, au premier import qui voit la fiche
+      // active dans la saison (y compris un ancien membre qui renouvelle :
+      // sa fiche existe déjà, avec l'ancienne date d'expiration). Jamais
+      // écrasée ensuite — d'où l'absence du champ dans `data` sinon.
+      // Saison active uniquement : un ré-import d'une saison passée ne doit pas
+      // dater ses membres d'aujourd'hui.
+      const actif = !saison.dateExpireLicence
+        || membre.dateExpiration === saison.dateExpireLicence
+      const activation = saison.isActive && actif && !existing?.dateActivation
+        ? { dateActivation: maintenant }
+        : {}
+
       // Upsert adhérent (unique sur saisonId + nom + prenom) — `existing`
       // a été chargé en tête de boucle.
       const data = {
+        ...activation,
         saisonId,
         nom:             membre.nom,
         prenom:          membre.prenom,

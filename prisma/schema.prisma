@@ -17,6 +17,12 @@ model Saison {
   dateDebut         String
   dateExpireLicence String
   dateFin           String
+  // Assemblée générale de la saison (JJ/MM/AAAA, comme les autres dates)
+  dateAG            String?
+  // Photo « inscrits pré-AG » : quand elle a été prise et combien de fiches
+  // ont été figées (voir Adherent.inscritPreAG)
+  datePhotoAG       DateTime?
+  nbPhotoAG         Int?
   adherents         Adherent[]
   attestationEmails AttestationEmail[]
   impressions       Impression[]
@@ -62,6 +68,16 @@ model Adherent {
   validation        ValidationFFESSM?
   // ISO "AAAA-MM-JJ" — VPdive "1ère inscription"
   datePremiereInscription String?            
+  // Photo pré-AG : true = membre actif de la saison au moment de la photo
+  // (bouton dans Gestion des saisons, la veille de l'AG). Jamais modifié par
+  // l'import → sert à comparer les saisons « à l'AG » d'une année sur l'autre.
+  inscritPreAG      Boolean            @default(false)
+  // Date à laquelle la fiche est devenue ACTIVE dans la saison (dateExpiration
+  // = dateExpireLicence de la saison), constatée à l'import. Posée une seule
+  // fois, jamais modifiée ensuite → courbe de progression des inscriptions.
+  // Précision = fréquence des imports. Antérieur au 21/10/2026 : reconstruit
+  // (prisma/sql/2026-10-date-activation.sql), donc approximatif.
+  dateActivation    DateTime?
 
   @@unique([saisonId, nom, prenom])
   @@index([saisonId])
