@@ -143,10 +143,17 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
       }
       if (matchedFormKey) formulaireKeysMatched.add(matchedFormKey)
 
-      // undefined si aucun fichier fourni → l'UPDATE laisse la section inchangée,
-      // le CREATE tombe sur null. Sinon on pose la valeur (ou null si non matché).
+      // Section :
+      //  - aucun fichier formulaire fourni → undefined : l'UPDATE laisse la
+      //    section inchangée, le CREATE tombe sur null ;
+      //  - personne trouvée dans le formulaire → sa section (le formulaire fait foi) ;
+      //  - personne ABSENTE du formulaire → on CONSERVE la section déjà en base
+      //    (ex. saisie à la main pour quelqu'un qui n'a pas rempli le formulaire),
+      //    au lieu de l'effacer.
       const sectionValue: string | null | undefined =
-        formulaireFile ? (formulaire?.sectionPrincipale ?? null) : undefined
+        !formulaireFile ? undefined
+        : formulaire     ? (formulaire.sectionPrincipale ?? existing?.section ?? null)
+        :                  (existing?.section ?? null)
 
       // Détecter désynchronisation adresse
       let adresseDesync = false
