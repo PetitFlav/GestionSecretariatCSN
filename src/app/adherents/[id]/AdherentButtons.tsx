@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateStatutAdherent, updateLicenceAdherent } from '@/app/actions/adherents'
+import { envoyerAttestationAMoi, telechargerAttestation } from '@/app/actions/attestations'
 import { STATUTS, STATUT_LABEL, STATUT_DESCRIPTION, Statut } from '@/lib/statut'
 
 const AGENT_URL       = 'http://localhost:3333'
@@ -113,14 +114,56 @@ export function BoutonEtiquette({
 }
 
 // ── BoutonAttestation ─────────────────────────────────────────────────────────
-export function BoutonAttestation({ adherentId }: { adherentId: string }) {
+// Secours admin : quand l'adhérent ne reçoit pas le mail, on récupère le PDF
+// (téléchargement direct ou copie envoyée à soi-même) pour le transmettre autrement.
+export function BoutonAttestation({ adherentId, isAdmin }: { adherentId: string; isAdmin: boolean }) {
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  if (!isAdmin) return null
+
+  function telecharger() {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await telechargerAttestation(adherentId)
+      if (!res.ok) { setMsg({ ok: false, text: res.error }); return }
+      const a = document.createElement('a')
+      a.href     = `data:application/pdf;base64,${res.base64}`
+      a.download = res.fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setMsg({ ok: true, text: 'PDF téléchargé' })
+    })
+  }
+
+  function envoyerAMoi() {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await envoyerAttestationAMoi(adherentId)
+      setMsg(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error })
+    })
+  }
+
+  const btn = 'text-[12px] px-3 py-2 rounded-lg border transition-colors hover:bg-slate-50 disabled:opacity-50'
+  const style = { borderColor: 'var(--csn-border-strong)', color: 'var(--csn-blue)' }
+
   return (
-    <button
-      className="text-[12px] px-3 py-2 rounded-lg border transition-colors hover:bg-slate-50"
-      style={{ borderColor: 'var(--csn-border-strong)', color: 'var(--csn-blue)' }}
-      onClick={() => alert('Envoi attestation — à venir Phase 4')}>
-      ✉ Attestation
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex gap-2">
+        <button className={btn} style={style} disabled={isPending} onClick={telecharger}
+          title="Télécharger le PDF de l'attestation">
+          {isPending ? '…' : '⬇ Attestation'}
+        </button>
+        <button className={btn} style={style} disabled={isPending} onClick={envoyerAMoi}
+          title="Recevoir l'attestation sur mon adresse de connexion">
+          {isPending ? '…' : '✉ M\'envoyer'}
+        </button>
+      </div>
+      {msg && (
+        <span className="text-[11px]" style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>{msg.text}</span>
+      )}
+    </div>
   )
 }
 

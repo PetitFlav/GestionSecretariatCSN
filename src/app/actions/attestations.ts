@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
-import { requireAuth } from '@/lib/session'
+import { requireAuth, requireAdmin } from '@/lib/session'
 import { generateAttestationPDF } from '@/lib/pdf-attestation'
 import { getSmtpTransporter } from '@/app/actions/smtp-config'
 
@@ -92,7 +92,7 @@ export async function envoyerAttestations(
 
       console.log(`[attestations] Envoi email à ${email}...`)
       // Envoyer via SMTP de l'utilisateur
-      await transporterInfo.transporter.sendMail({
+      const info = await transporterInfo.transporter.sendMail({
         from:    transporterInfo.from,
         to:      email,
         subject: `Attestation de paiement — Saison ${saisonLabel}`,
@@ -101,7 +101,12 @@ export async function envoyerAttestations(
         attachments: [{ filename: fileName, content: Buffer.from(pdfBytes) }],
       })
 
-      console.log(`[attestations] Email envoyé avec succès à ${email}`)
+      // « Envoyé » = accepté par TON serveur SMTP, pas « arrivé dans la boîte ».
+      // Un refus immédiat du destinataire remonte ici ; le reste (spam, filtre) est invisible.
+      if (info.rejected?.length) {
+        throw new Error(`Adresse rejetée par le serveur SMTP : ${info.rejected.join(', ')}`)
+      }
+      console.log(`[attestations] Email accepté par le SMTP pour ${email} — réponse: ${info.response ?? '?'} — messageId: ${info.messageId ?? '?'}`)
       // Enregistrer en base
       await prisma.attestationEmail.create({
         data: { adherentId, saisonId, email },
@@ -150,4 +155,88 @@ export async function previewAttestation(
   })
 
   return Buffer.from(pdfBytes).toString('base64')
+}
+
+// ── Copie de secours (admin) ──────────────────────────────────────────────────
+// Quand un adhérent dit ne rien recevoir : l'admin récupère le PDF pour le
+// transmettre par un autre canal (WhatsApp, mail perso, en main propre…).
+
+async function buildAttestationPdf(adherentId: string) {
+  const adherent = await prisma.adherent.findUnique({ where: { id: adherentId } })
+  if (!adherent) return null
+  const saison = await prisma.saison.findUnique({ where: { id: adherent.saisonId } })
+  if (!saison) return null
+
+  const civMap: Record<string, string> = {
+    monsieur: 'M.', madame: 'Mme', mademoiselle: 'Melle',
+  }
+  const civKey      = (adherent.civilite ?? '').toLowerCase()
+  const civilite    = Object.entries(civMap).find(([k]) => civKey.includes(k))?.[1] ?? ''
+  const saisonLabel = saison.label.replace('-', '/')
+
+  const pdfBytes = await generateAttestationPDF({
+    civilite,
+    nom:     adherent.nom,
+    prenom:  adherent.prenom,
+    montant: adherent.montant ?? '—',
+    saison:  saisonLabel,
+    dateJour: new Date().toLocaleDateString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    }),
+  })
+
+  const fileName = `attestation-${adherent.nom.toLowerCase().replace(/\s+/g, '-')}-${saisonLabel.replace('/', '-')}.pdf`
+  return { adherent, saisonLabel, pdfBytes, fileName }
+}
+
+export type CopieResult = { ok: true; message: string } | { ok: false; error: string }
+
+/** Envoie l'attestation d'un adhérent à l'adresse de connexion de l'admin connecté. */
+export async function envoyerAttestationAMoi(adherentId: string): Promise<CopieResult> {
+  let user
+  try { user = await requireAdmin() } catch (e) { return { ok: false, error: (e as Error).message } }
+
+  let smtp: Awaited<ReturnType<typeof getSmtpTransporter>>
+  try {
+    smtp = await getSmtpTransporter(user.id)
+  } catch {
+    return { ok: false, error: 'Aucun compte email configuré. Allez dans Config → Mon compte email.' }
+  }
+
+  const built = await buildAttestationPdf(adherentId)
+  if (!built) return { ok: false, error: 'Adhérent ou saison introuvable' }
+  const { adherent, saisonLabel, pdfBytes, fileName } = built
+
+  try {
+    const body =
+      `Copie de l'attestation de paiement de ${adherent.prenom} ${adherent.nom} (saison ${saisonLabel}),\n` +
+      `à transmettre par un autre moyen.`
+    const info = await smtp.transporter.sendMail({
+      from:    smtp.from,
+      to:      user.email,
+      subject: `[Copie] Attestation ${adherent.prenom} ${adherent.nom} — Saison ${saisonLabel}`,
+      text:    body,
+      html:    body.replace(/\n/g, '<br>'),
+      attachments: [{ filename: fileName, content: Buffer.from(pdfBytes) }],
+    })
+    if (info.rejected?.length) {
+      return { ok: false, error: `Adresse rejetée : ${info.rejected.join(', ')}` }
+    }
+    console.log(`[attestations] Copie ${adherent.nom} envoyée à l'admin ${user.email}`)
+    // Volontairement PAS enregistré dans attestationEmail : ce n'est pas un envoi à l'adhérent.
+    return { ok: true, message: `Envoyée à ${user.email}` }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Renvoie le PDF en base64 pour téléchargement direct (aucune dépendance SMTP). */
+export async function telechargerAttestation(
+  adherentId: string
+): Promise<{ ok: true; base64: string; fileName: string } | { ok: false; error: string }> {
+  try { await requireAdmin() } catch (e) { return { ok: false, error: (e as Error).message } }
+
+  const built = await buildAttestationPdf(adherentId)
+  if (!built) return { ok: false, error: 'Adhérent ou saison introuvable' }
+  return { ok: true, base64: Buffer.from(built.pdfBytes).toString('base64'), fileName: built.fileName }
 }

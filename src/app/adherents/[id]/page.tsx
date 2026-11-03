@@ -54,7 +54,8 @@ export default async function AdherentDetailPage({ params }: Props) {
           </div>
           <div className="flex gap-2 flex-shrink-0">
             {peutAvoirEtiquette(a.statut) && <BoutonEtiquette adherentId={a.id} />}
-            <BoutonAttestation adherentId={a.id} />
+            <BoutonAttestation adherentId={a.id}
+              isAdmin={user.role === 'ADMIN' || user.role === 'SUPERUSER'} />
           </div>
         </div>
 
