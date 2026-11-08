@@ -61,6 +61,9 @@ model Adherent {
   ffessmForce       Boolean            @default(false)
   ffessmForceNote   String?
   section           String?
+  // Section corrigée/saisie à la main depuis la fiche : l'import du
+  // formulaire d'adhésions ne l'écrase plus tant que ce flag est à true.
+  sectionManuelle   Boolean            @default(false)
   saison            Saison             @relation(fields: [saisonId], references: [id], onDelete: Cascade)
   attestationEmails AttestationEmail[]
   impressions       Impression[]

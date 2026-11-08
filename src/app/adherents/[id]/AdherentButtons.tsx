@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateStatutAdherent, updateLicenceAdherent } from '@/app/actions/adherents'
+import { updateStatutAdherent, updateLicenceAdherent, updateSectionAdherent } from '@/app/actions/adherents'
 import { envoyerAttestationAMoi, telechargerAttestation } from '@/app/actions/attestations'
 import { STATUTS, STATUT_LABEL, STATUT_DESCRIPTION, Statut } from '@/lib/statut'
+import { SECTIONS } from '@/lib/sections'
 
 const AGENT_URL       = 'http://localhost:3333'
 const AGENT_TIMEOUT   = 2000
@@ -327,6 +328,91 @@ export function LicenceForm({
           {isPending ? '…' : 'OK'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── SectionForm ───────────────────────────────────────────────────────────────
+// Choix manuel de la section principale : adhérent inscrit par l'équipe
+// (pas d'accès au formulaire VPdive) ou erreur de saisie à l'inscription.
+// Une saisie manuelle est prioritaire sur l'import du formulaire.
+export function SectionForm({
+  adherentId, initialSection, initialManuelle,
+}: {
+  adherentId:      string
+  initialSection:  string | null
+  initialManuelle: boolean
+}) {
+  const [section, setSection] = useState(initialSection ?? '')
+  const [msg, setMsg]         = useState<{ ok: boolean; text: string } | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
+
+  const dirty = section !== (initialSection ?? '')
+  // Libellé historique hors liste (import d'un intitulé inconnu) : on l'affiche
+  // pour ne pas le perdre silencieusement, mais il n'est pas re-sélectionnable.
+  const horsListe = initialSection && !(SECTIONS as readonly string[]).includes(initialSection)
+
+  function run(input: Parameters<typeof updateSectionAdherent>[1]) {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await updateSectionAdherent(adherentId, input)
+      setMsg(res.success
+        ? { ok: true,  text: 'Enregistré' }
+        : { ok: false, text: res.error ?? 'Erreur' })
+      if (res.success) router.refresh()
+    })
+  }
+
+  return (
+    <div className="py-2.5" style={{ borderBottom: '0.5px solid var(--csn-border)' }}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[12px] text-slate-400">Section principale</span>
+        <div className="flex items-center gap-2">
+          {msg && (
+            <span className="text-[11px]" style={{ color: msg.ok ? '#16a34a' : '#dc2626' }}>{msg.text}</span>
+          )}
+          <select
+            value={section}
+            onChange={e => setSection(e.target.value)}
+            disabled={isPending}
+            className="px-2 py-1 text-[13px] rounded-lg outline-none font-medium"
+            style={{
+              border: '0.5px solid var(--csn-border-strong)',
+              background: 'var(--csn-cream)',
+              color: 'var(--csn-navy)',
+            }}
+          >
+            <option value="">— Aucune —</option>
+            {horsListe && <option value={initialSection!} disabled>{initialSection} (hors liste)</option>}
+            {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button
+            onClick={() => run({ section: section || null })}
+            disabled={!dirty || isPending}
+            className="text-[12px] px-2.5 py-1 rounded-lg text-white transition-opacity disabled:opacity-40"
+            style={{ background: 'var(--csn-navy)' }}
+          >
+            {isPending ? '…' : 'OK'}
+          </button>
+        </div>
+      </div>
+      {initialManuelle && (
+        <div className="flex items-center justify-end gap-2 mt-1.5">
+          <span className="text-[11px] text-slate-400">
+            Saisie manuelle — l&apos;import du formulaire ne la modifie plus
+          </span>
+          <button
+            onClick={() => run({ rendreALImport: true })}
+            disabled={isPending}
+            className="text-[11px] underline disabled:opacity-40"
+            style={{ color: 'var(--csn-blue)' }}
+            title="Le prochain import du formulaire d'adhésions refera foi"
+          >
+            Rendre la main à l&apos;import
+          </button>
+        </div>
+      )}
     </div>
   )
 }

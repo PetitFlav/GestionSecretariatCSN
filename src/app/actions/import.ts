@@ -150,8 +150,10 @@ export async function importerFichiers(formData: FormData): Promise<ImportResult
       //  - personne ABSENTE du formulaire → on CONSERVE la section déjà en base
       //    (ex. saisie à la main pour quelqu'un qui n'a pas rempli le formulaire),
       //    au lieu de l'effacer.
+      //  - section saisie à la main depuis la fiche (sectionManuelle) → on n'y
+      //    touche jamais, même si le formulaire dit autre chose.
       const sectionValue: string | null | undefined =
-        !formulaireFile ? undefined
+        !formulaireFile || existing?.sectionManuelle ? undefined
         : formulaire     ? (formulaire.sectionPrincipale ?? existing?.section ?? null)
         :                  (existing?.section ?? null)
 

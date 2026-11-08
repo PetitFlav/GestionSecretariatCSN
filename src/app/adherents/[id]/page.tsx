@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 import { getAdherentDetail } from '@/app/actions/adherents'
-import { BoutonEtiquette, BoutonAttestation, StatutAdherentForm, LicenceForm } from './AdherentButtons'
+import { BoutonEtiquette, BoutonAttestation, StatutAdherentForm, LicenceForm, SectionForm } from './AdherentButtons'
 import { StatutBadge } from '@/components/StatutBadge'
 import SupprimerAdherent from '@/components/SupprimerAdherent'
 import { peutAvoirEtiquette } from '@/lib/statut'
@@ -74,6 +74,11 @@ export default async function AdherentDetailPage({ params }: Props) {
 
         {/* Informations personnelles */}
         <Section title="Informations">
+          <SectionForm
+            adherentId={a.id}
+            initialSection={a.section}
+            initialManuelle={a.sectionManuelle}
+          />
           <Row label="Date de naissance" value={a.dateNaissance} />
           <Row label="Email"             value={a.email} />
         </Section>

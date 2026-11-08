@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { requireAuth, requireAdmin } from '@/lib/session'
 import { revalidatePath } from 'next/cache'
+import { isSection } from '@/lib/sections'
 import { Statut, isStatut, soumisControleFFESSM } from '@/lib/statut'
 import { estInvite, PAS_INVITE } from '@/lib/invite'
 
@@ -369,6 +370,7 @@ export interface AdherentDetail {
   dateExpiration: string | null; caci: string | null
   adresseDesync: boolean; ffessmId: string | null
   statut: Statut; ffessmForce: boolean; ffessmForceNote: string | null
+  section: string | null; sectionManuelle: boolean
   email: string | null; dateNaissance: string | null
   adresse: string | null; codePostal: string | null; ville: string | null
   ffessmStatut:     string | null
@@ -396,6 +398,7 @@ export async function getAdherentDetail(id: string): Promise<AdherentDetail | nu
     dateExpiration: a.dateExpiration, caci: a.caci,
     adresseDesync: a.adresseDesync, ffessmId: a.ffessmId,
     statut: a.statut, ffessmForce: a.ffessmForce, ffessmForceNote: a.ffessmForceNote,
+    section: a.section, sectionManuelle: a.sectionManuelle,
     email:         decrypt(a.emailEnc),
     dateNaissance: decrypt(a.dateNaissanceEnc),
     adresse:       decrypt(a.adresseEnc),
@@ -461,6 +464,36 @@ export async function updateLicenceAdherent(
   await prisma.adherent.update({
     where: { id: adherentId },
     data:  { licence: value },
+  })
+  return { success: true }
+}
+
+// ── Section saisie à la main ──────────────────────────────────────────────────
+// Adhérent inscrit par l'équipe (pas d'accès au formulaire VPdive) ou section
+// principale mal saisie à l'inscription. La saisie pose `sectionManuelle` :
+// l'import du formulaire ne l'écrasera plus. `rendreALImport` lève le verrou
+// (la section reste en place jusqu'au prochain import, qui refait foi).
+
+export async function updateSectionAdherent(
+  adherentId: string,
+  input: { section: string | null } | { rendreALImport: true }
+): Promise<{ success: boolean; error?: string }> {
+  await requireAuth()
+
+  if ('rendreALImport' in input) {
+    await prisma.adherent.update({
+      where: { id: adherentId },
+      data:  { sectionManuelle: false },
+    })
+    return { success: true }
+  }
+
+  const value = input.section?.trim() || null
+  if (value && !isSection(value)) return { success: false, error: 'Section inconnue' }
+
+  await prisma.adherent.update({
+    where: { id: adherentId },
+    data:  { section: value, sectionManuelle: true },
   })
   return { success: true }
 }
