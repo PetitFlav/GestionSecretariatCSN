@@ -17,7 +17,7 @@ cp .env.example .env
 ```
 
 Éditer `.env` et renseigner :
-- `DATABASE_URL` et `DIRECT_URL` → vos URLs Supabase
+- `DATABASE_URL` et `DIRECT_URL` → vos URLs Neon (pooler pour `DATABASE_URL`, directe sans `-pooler` pour `DIRECT_URL`)
 - `SESSION_SECRET` → une chaîne aléatoire longue (`openssl rand -base64 32`)
 - `NEXT_PUBLIC_APP_URL` → `http://localhost:3000` en dev
 
@@ -53,7 +53,7 @@ utilisez Prisma Studio ou une insertion directe en base :
 npm run db:studio
 ```
 
-Ou via psql / Supabase SQL editor :
+Ou via psql / l'éditeur SQL de Neon :
 
 ```sql
 INSERT INTO users (id, email, "firstName", "lastName", "passwordHash", role, status, "createdAt", "updatedAt")
@@ -110,8 +110,8 @@ Ces commandes mettent à jour `package.json` ET créent un tag git automatiqueme
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | URL Supabase avec pgbouncer |
-| `DIRECT_URL` | URL Supabase directe (pour migrations) |
+| `DATABASE_URL` | URL Neon poolée (`-pooler`) |
+| `DIRECT_URL` | URL Neon directe, sans `-pooler` (pour migrations) |
 | `SESSION_SECRET` | Secret de session (min 32 chars) |
 | `NEXT_PUBLIC_APP_URL` | URL de l'app en production |
 | `SMTP_HOST` | Serveur SMTP |

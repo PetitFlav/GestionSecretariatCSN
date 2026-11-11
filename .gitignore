@@ -20,6 +20,9 @@
 # prisma
 prisma/generated/
 
+# binaires / archives — NE JAMAIS COMMITER
+*.zip
+
 # misc
 .DS_Store
 *.pem

@@ -1,6 +1,6 @@
 # GestionSecretariatCSN — Contexte pour Claude Code
 
-Application de gestion du secrétariat du CSN (Club Sportif Nantais, club multi-sections : plongée, apnée, hockey subaquatique, nage avec palmes, chasse).
+Application de gestion du secrétariat du CSN (Centre Subaquatique Nantais, club multi-sections : plongée, apnée, hockey subaquatique, nage avec palmes, chasse).
 Elle remplace les workflows manuels basés sur les exports VPdive (outil tiers de gestion des adhérents) et FFESSM (fédération).
 
 Mainteneur : Yann AUBER, secrétaire du club. Développeur de métier (Delphi/logistique) mais **pas expert des langages web** : il pilote en chef de projet, définit besoins et architecture, et veut comprendre ce qui est fait.
@@ -46,7 +46,7 @@ Langue : **tout en français** (échanges, commentaires, messages de commit, lib
 - Les parsers renvoient des `Map` typées + un tableau d'erreurs.
 - Rapprochement des membres par le nom (`makeKey` / `keysMatch` / `cleanName`) car VPdive n'a pas de clé unique fiable ; le **numéro de licence** sert de clé de jointure quand il existe.
 - Champs sensibles (email, adresse, date de naissance) chiffrés via les helpers `encrypt` / `decrypt`.
-- **Agent d'impression local** (`agent.js`, `localhost:3333`) : obligatoire, car Vercel ne peut pas joindre localhost. C'est le navigateur qui orchestre : récupère le PNG sur `/api/label` → POST vers l'agent local → enregistre l'impression via `/api/print/record`.
+- **Agent d'impression local** (`agent/agent.js` + scripts Python `agent/print_windows.py`, `agent/print_ql570.py`, `localhost:3333`) : obligatoire, car Vercel ne peut pas joindre localhost. C'est le navigateur qui orchestre : récupère le PNG sur `/api/label` → POST vers l'agent local → enregistre l'impression via `/api/print/record`.
 
 ## Règles métier
 
@@ -64,7 +64,7 @@ Langue : **tout en français** (échanges, commentaires, messages de commit, lib
 ## ⛔ Zone gelée : impression des étiquettes
 
 Le setup d'impression a demandé plus de 4 h de calibration. **Ne rien modifier dans ces fichiers sans demande explicite de Yann :**
-`src/lib/label.ts`, `src/app/api/label/route.ts`, `src/app/api/print/route.ts`, `src/app/api/print/preview/route.ts`, `agent.js`.
+`src/lib/label.ts`, `src/app/api/label/route.ts`, `src/app/api/print/route.ts`, `src/app/api/print/preview/route.ts`, et tout le dossier `agent/` (`agent.js`, `print_windows.py`, `print_ql570.py`).
 
 Faits établis :
 - Brother QL-570 sur un PC Windows, impression via `pywin32` / `win32print` (`brother_ql` ne marche pas sous Windows).
