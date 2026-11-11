@@ -9,6 +9,7 @@
 
 # production
 /build
+/tmp
 
 # env files — NE JAMAIS COMMITER
 .env
