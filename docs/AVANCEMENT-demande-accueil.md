@@ -6,11 +6,11 @@
 
 ## Plan
 
-- [ ] **1. Schéma et base dev**
-  - 7 modèles + enum `StatutDemande` + relations inverses dans `prisma/schema.prisma` (aucune colonne ajoutée à `adherents`, à vérifier dans le SQL généré).
-  - Vérifier que l'URL pointe sur `ep-ancient-block`, puis :
-    `DATABASE_URL="$DEV_DATABASE_URL" DIRECT_URL="$DEV_DIRECT_URL" npx prisma db push`
-  - Script `prisma/sql/2026-11-demande-accueil.sql` (rejouable) exécuté sur dev.
+- [x] **1. Schéma et base dev** — fait le 12/11/2026
+  - 8 modèles (8 tables) + enum `StatutDemande` + relations inverses dans `prisma/schema.prisma`. SQL généré vérifié : uniquement des `CREATE` / `ADD CONSTRAINT`, aucun `ALTER TABLE adherents`.
+  - Contrôle avant push : `prisma migrate diff --from-schema-datasource` (base dev réelle → schéma) = aucune dérive, aucun DROP.
+  - `npx prisma db push` (sans `--accept-data-loss`) sur `ep-ancient-block` : le `.env` local pointe directement sur dev (les variables `DEV_*` ne sont pas définies dans le shell).
+  - Script `prisma/sql/2026-11-demande-accueil.sql` exécuté 2 fois (rejouable confirmé) : 4 types, 4 fonctions, 6 destinataires, contrainte `chk_ordre_responsable` en place. Données existantes intactes (2 saisons, 686 adhérents, 4 users). `npx tsc --noEmit` OK.
 - [ ] **2. Génération du PDF** : `src/lib/pdf-demande-accueil.ts` + route d'aperçu, testés sur le modèle fourni (données fictives), calibrage du décalage `dy`.
 - [ ] **3. Modèle PDF dans la gestion des saisons**
   - Upload du modèle (`requireAdmin`) avec vérification des 13 champs.

@@ -28,6 +28,9 @@ model Saison {
   impressions       Impression[]
   rappelsCaci       RappelCaci[]
   validations       ValidationFFESSM[]
+  // Demande d'accueil piscine (relations virtuelles, aucune colonne)
+  modeleDemande     ModeleDemande?
+  demandesAccueil   DemandeAccueil[]
 
   @@map("saisons")
 }
@@ -81,6 +84,10 @@ model Adherent {
   // Précision = fréquence des imports. Antérieur au 21/10/2026 : reconstruit
   // (prisma/sql/2026-10-date-activation.sql), donc approximatif.
   dateActivation    DateTime?
+  // Demande d'accueil piscine : relations virtuelles, AUCUNE colonne ajoutée
+  // à la table adherents (contrainte de la spec).
+  fonctions           AdherentFonction[]
+  demandesResponsable DemandeResponsableAccueil[]
 
   @@unique([saisonId, nom, prenom])
   @@index([saisonId])
@@ -148,6 +155,8 @@ model User {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   smtpConfig       UserSmtpConfig?
+  // Demandes d'accueil piscine créées par cet utilisateur (relation virtuelle)
+  demandesAccueil  DemandeAccueil[]
 
   @@map("users")
 }
@@ -184,6 +193,149 @@ model RappelCaci {
   @@map("rappels_caci")
 }
 
+// ═══ Demande d'accueil piscine Léo Lagrange ═══════════════════
+// Spec : docs/SPEC-demande-accueil.md
+
+// ─── Référentiels (alimentés par SQL, pas d'écran) ───────────
+
+model TypeDemande {
+  id       String           @id @default(cuid())
+  code     String           @unique
+  // Texte imprimé dans le champ type_demande du PDF
+  libelle  String
+  ordre    Int              @default(0)
+  // Pour retirer un type : actif = false (suppression bloquée s'il est utilisé)
+  actif    Boolean          @default(true)
+  demandes DemandeAccueil[]
+
+  @@map("types_demande")
+}
+
+model Fonction {
+  id           String             @id @default(cuid())
+  // PRESIDENT, SECRETAIRE, TRESORIER, CODIR
+  code         String             @unique
+  libelle      String
+  ordre        Int                @default(0)
+  actif        Boolean            @default(true)
+  affectations AdherentFonction[]
+
+  @@map("fonctions")
+}
+
+// Fonction au bureau d'un adhérent. Pas de saisonId : la fiche Adherent
+// est déjà propre à une saison.
+model AdherentFonction {
+  id         String   @id @default(cuid())
+  adherentId String
+  fonctionId String
+  createdAt  DateTime @default(now())
+  adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  fonction   Fonction @relation(fields: [fonctionId], references: [id], onDelete: Restrict)
+
+  @@unique([adherentId, fonctionId])
+  @@index([fonctionId])
+  @@map("adherents_fonctions")
+}
+
+model DestinataireDemande {
+  id          String  @id @default(cuid())
+  nom         String
+  prenom      String?
+  email       String  @unique
+  // "Chef de bassin", "Direction", "Secrétaire"
+  role        String?
+  ordre       Int     @default(0)
+  // Mémorise les cases cochées lors du dernier envoi
+  selectionne Boolean @default(true)
+  // false = plus proposé (on ne supprime pas)
+  actif       Boolean @default(true)
+
+  @@map("destinataires_demande")
+}
+
+// Téléphones saisis dans l'écran d'envoi, réutilisés d'un envoi à l'autre.
+// Clé = makeKey(nom, prenom) → survit au changement de saison.
+model ContactDemande {
+  id           String   @id @default(cuid())
+  cle          String   @unique
+  nom          String
+  prenom       String
+  telephoneEnc String
+  updatedAt    DateTime @updatedAt
+
+  @@map("contacts_demande")
+}
+
+// ─── Modèle PDF par saison ───────────────────────────────────
+
+model ModeleDemande {
+  id        String           @id @default(cuid())
+  saisonId  String           @unique
+  pdf       Bytes
+  // Style par champ (taille, couleur, alignement, décalage dy)
+  champs    Json
+  updatedAt DateTime         @updatedAt
+  saison    Saison           @relation(fields: [saisonId], references: [id], onDelete: Restrict)
+  demandes  DemandeAccueil[]
+
+  @@map("modeles_demande")
+}
+
+// ─── Historique des demandes ─────────────────────────────────
+
+model DemandeAccueil {
+  id            String        @id @default(cuid())
+  saisonId      String
+  typeDemandeId String
+  modeleId      String
+  creeParId     String
+  // @db.Date : revient à minuit UTC → formater avec timeZone 'UTC'
+  dateSouhaitee DateTime      @db.Date
+  // "09:00"
+  heureDebut    String
+  // "10:30"
+  heureFin      String
+  nbAdultes     Int
+  nbEnfants     Int
+  // Emails réellement utilisés (À / CC)
+  destinataires String[]
+  cc            String[]
+  // PDF exact envoyé (jamais chargé dans la liste de l'historique)
+  pdf           Bytes?
+  statut        StatutDemande @default(BROUILLON)
+  erreur        String?
+  envoyeeLe     DateTime?
+  createdAt     DateTime      @default(now())
+
+  saison       Saison                      @relation(fields: [saisonId], references: [id], onDelete: Restrict)
+  typeDemande  TypeDemande                 @relation(fields: [typeDemandeId], references: [id], onDelete: Restrict)
+  modele       ModeleDemande               @relation(fields: [modeleId], references: [id], onDelete: Restrict)
+  creePar      User                        @relation(fields: [creeParId], references: [id], onDelete: Restrict)
+  responsables DemandeResponsableAccueil[]
+
+  @@index([saisonId, dateSouhaitee])
+  @@map("demandes_accueil")
+}
+
+// Responsables de l'accueil (1 ou 2). Le nom est figé à l'envoi : si la
+// fiche adhérent est supprimée, adherentId passe à NULL mais le nom reste.
+model DemandeResponsableAccueil {
+  id         String         @id @default(cuid())
+  demandeId  String
+  // 1 ou 2 → champ responsable_accueil_1 / _2 (CHECK posé par le script SQL)
+  ordre      Int
+  adherentId String?
+  // "Prénom NOM" au moment de l'envoi
+  nom        String
+  demande    DemandeAccueil @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  adherent   Adherent?      @relation(fields: [adherentId], references: [id], onDelete: SetNull)
+
+  @@unique([demandeId, ordre])
+  @@unique([demandeId, adherentId])
+  @@map("demandes_responsables_accueil")
+}
+
 enum StatutAdherent {
   LICENCIE  // licence + adhésion au CSN
   EXTERNE   // adhésion CSN, licence prise dans un autre club
@@ -211,4 +363,10 @@ enum UserStatus {
   PENDING
   ACTIVE
   DISABLED
+}
+
+enum StatutDemande {
+  BROUILLON // créée au clic sur « Envoyer », avant l'envoi
+  ENVOYEE
+  ERREUR
 }
