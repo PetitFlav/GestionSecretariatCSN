@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { creerSaison, activerSaison } from '@/app/actions/import'
 import { definirDateAG, getInfoPhotoAG, prendrePhotoAG } from '@/app/actions/saisons-ag'
+import { enregistrerModeleDemande } from '@/app/actions/modele-demande'
 
 interface Saison {
   id: string
@@ -15,6 +16,7 @@ interface Saison {
   dateAG: string | null          // JJ/MM/AAAA
   datePhotoAG: Date | null
   nbPhotoAG: number | null
+  modeleDemandeMaj: Date | null  // modèle PDF demande piscine : date du dernier upload
 }
 
 export default function SaisonsClient({ saisons: initial }: { saisons: Saison[] }) {
@@ -130,6 +132,9 @@ export default function SaisonsClient({ saisons: initial }: { saisons: Saison[] 
                   <BlocAG saison={s}
                     onChange={maj => setSaisons(prev => prev.map(x => (x.id === s.id ? { ...x, ...maj } : x)))} />
                 )}
+                {/* Toutes les saisons : modèle PDF de la demande d'accueil piscine */}
+                <BlocModeleDemande saison={s}
+                  onChange={maj => setSaisons(prev => prev.map(x => (x.id === s.id ? { ...x, ...maj } : x)))} />
               </div>
               {!s.isActive && (
                 <button
@@ -249,6 +254,60 @@ export default function SaisonsClient({ saisons: initial }: { saisons: Saison[] 
               </button>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Modèle PDF de la demande d'accueil piscine ───────────────────────────────
+
+function BlocModeleDemande({ saison, onChange }: {
+  saison: Saison
+  onChange: (maj: Partial<Saison>) => void
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const present = !!saison.modeleDemandeMaj
+
+  function envoyer(e: React.ChangeEvent<HTMLInputElement>) {
+    const fichier = e.target.files?.[0]
+    e.target.value = ''            // permet de re-choisir le même fichier
+    if (!fichier) return
+    if (present && !window.confirm(`Remplacer le modèle de la saison ${saison.label} ?`)) return
+
+    setMsg(null)
+    const fd = new FormData()
+    fd.append('fichier', fichier)
+    startTransition(async () => {
+      const res = await enregistrerModeleDemande(saison.id, fd)
+      if (res.ok) {
+        onChange({ modeleDemandeMaj: res.updatedAt ? new Date(res.updatedAt) : new Date() })
+        setMsg({ type: 'ok', text: `Modèle « ${fichier.name} » enregistré : les 13 champs sont présents.` })
+      } else {
+        setMsg({ type: 'err', text: res.error ?? 'Erreur' })
+      }
+    })
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+        <span className="font-medium" style={{ color: 'var(--csn-navy)' }}>Modèle demande piscine :</span>
+        {present
+          ? <span className="text-slate-500">chargé le {fmtDateHeure(saison.modeleDemandeMaj!)}</span>
+          : <span className="text-slate-400">aucun</span>}
+        <label
+          className={`px-2 py-0.5 rounded border transition-colors hover:bg-slate-50 ${isPending ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+          style={{ borderColor: 'var(--csn-border-strong)', color: 'var(--csn-navy)' }}>
+          {isPending ? 'Vérification…' : present ? 'Remplacer…' : 'Charger le PDF…'}
+          <input type="file" accept="application/pdf,.pdf" className="hidden"
+            onChange={envoyer} disabled={isPending} />
+        </label>
+      </div>
+      {msg && (
+        <div className="text-[11px]" style={{ color: msg.type === 'ok' ? '#1a6642' : '#9b1c1c' }}>
+          {msg.text}
         </div>
       )}
     </div>

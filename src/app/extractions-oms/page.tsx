@@ -27,8 +27,13 @@ export default async function ExtractionsOmsPage() {
         {saisons.length === 0 ? (
           <div className="rounded-xl p-5 text-[13px]"
             style={{ background: '#fff8e6', border: '0.5px solid #e8c96a', color: '#7a5a00' }}>
-            Aucune saison configurée. Créez d&apos;abord une saison dans{' '}
-            <a href="/saisons" className="underline">Gestion des saisons</a>.
+            Aucune saison configurée.{' '}
+            {user.role === 'ADMIN' || user.role === 'SUPERUSER' ? (
+              <>Créez d&apos;abord une saison dans{' '}
+                <a href="/saisons" className="underline">Gestion des saisons</a>.</>
+            ) : (
+              <>Contactez un administrateur pour qu&apos;il en crée une.</>
+            )}
           </div>
         ) : (
           <ExtractionsOmsClient saisons={saisons.map(s => ({ id: s.id, label: s.label, isActive: s.isActive }))} />

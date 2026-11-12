@@ -15,10 +15,12 @@
   - [x] `src/lib/pdf-demande-accueil.ts` (12/11/2026) : `verifierModeleDemande`, `genererPdfDemande`, styles par défaut surchargeables, réduction auto des textes longs (min 7 pt), formats `formaterJour` / `formaterHoraires` / `formaterPrenomNom`. Testé sur le modèle 2026 avec données fictives : rendu conforme, accents OK, erreur explicite sur un modèle sans champs.
   - [x] Calibrage : **`dy = 0`** (lignes de base alignées sur les libellés ; à 2,5 pt le texte était trop bas). Réglage conservé, surchargeable par saison.
   - Route d'aperçu : **reportée à l'étape 5** (décision de Yann, 13/11/2026), voir « Autres décisions ».
-- [ ] **3. Modèle PDF dans la gestion des saisons**
-  - Upload du modèle (`requireAdmin`) avec vérification des 13 champs.
-  - Page `/saisons` réservée aux ADMIN / SUPERUSER (redirection des autres vers l'accueil).
-  - Liens « Gestion des saisons » des pages Import, Statistiques et Extractions O.M.S. affichés aux admins seulement ; les autres voient « contactez un administrateur ».
+- [ ] **3. Modèle PDF dans la gestion des saisons** — code fait le 13/11/2026, `tsc` + `build` OK, **test manuel à faire par Yann**
+  - [x] Upload du modèle (`requireAdmin`) avec vérification des 13 champs : `src/app/actions/modele-demande.ts` (`enregistrerModeleDemande`). Max 900 Ko (limite Next de 1 Mo des server actions, non modifiée). Re-upload = remplacement du PDF, réglages `champs` conservés.
+  - [x] Bloc « Modèle demande piscine » sur **chaque** saison (pour préparer la saison suivante avant activation), confirmation avant remplacement.
+  - [x] Page `/saisons` réservée aux ADMIN / SUPERUSER (redirection des autres vers l'accueil).
+  - [x] Liens « Gestion des saisons » des pages Import, Statistiques et Extractions O.M.S. affichés aux admins seulement ; les autres voient « Contactez un administrateur ».
+  - ⚠ Les actions existantes `creerSaison` / `activerSaison` (`src/app/actions/import.ts`, intouchable) et `definirDateAG` restent en `requireAuth` : la page est cachée aux non-admins mais ces actions ne sont pas verrouillées côté serveur.
 - [ ] **4. Écran « Bureau »** dans le menu Config (partie Administration), `requireAdmin`.
 - [ ] **5. Écran de demande** : tuile sur l'accueil, formulaire, route d'aperçu PDF, envoi, historique.
 - [ ] **6. Contrôles finaux** : `npx tsc --noEmit`, `npm run build`, tests manuels sur dev. Merge `dev` → `main` et mise à jour de la prod **uniquement sur demande de Yann**.
