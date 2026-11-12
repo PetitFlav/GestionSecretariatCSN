@@ -11,13 +11,16 @@
   - Contrôle avant push : `prisma migrate diff --from-schema-datasource` (base dev réelle → schéma) = aucune dérive, aucun DROP.
   - `npx prisma db push` (sans `--accept-data-loss`) sur `ep-ancient-block` : le `.env` local pointe directement sur dev (les variables `DEV_*` ne sont pas définies dans le shell).
   - Script `prisma/sql/2026-11-demande-accueil.sql` exécuté 2 fois (rejouable confirmé) : 4 types, 4 fonctions, 6 destinataires, contrainte `chk_ordre_responsable` en place. Données existantes intactes (2 saisons, 686 adhérents, 4 users). `npx tsc --noEmit` OK.
-- [ ] **2. Génération du PDF** : `src/lib/pdf-demande-accueil.ts` + route d'aperçu, testés sur le modèle fourni (données fictives), calibrage du décalage `dy`.
+- [x] **2. Génération du PDF** : `src/lib/pdf-demande-accueil.ts`, testé sur le modèle fourni (données fictives), calibrage du décalage `dy`.
+  - [x] `src/lib/pdf-demande-accueil.ts` (12/11/2026) : `verifierModeleDemande`, `genererPdfDemande`, styles par défaut surchargeables, réduction auto des textes longs (min 7 pt), formats `formaterJour` / `formaterHoraires` / `formaterPrenomNom`. Testé sur le modèle 2026 avec données fictives : rendu conforme, accents OK, erreur explicite sur un modèle sans champs.
+  - [x] Calibrage : **`dy = 0`** (lignes de base alignées sur les libellés ; à 2,5 pt le texte était trop bas). Réglage conservé, surchargeable par saison.
+  - Route d'aperçu : **reportée à l'étape 5** (décision de Yann, 13/11/2026), voir « Autres décisions ».
 - [ ] **3. Modèle PDF dans la gestion des saisons**
   - Upload du modèle (`requireAdmin`) avec vérification des 13 champs.
   - Page `/saisons` réservée aux ADMIN / SUPERUSER (redirection des autres vers l'accueil).
   - Liens « Gestion des saisons » des pages Import, Statistiques et Extractions O.M.S. affichés aux admins seulement ; les autres voient « contactez un administrateur ».
 - [ ] **4. Écran « Bureau »** dans le menu Config (partie Administration), `requireAdmin`.
-- [ ] **5. Écran de demande** : tuile sur l'accueil, formulaire, aperçu, envoi, historique.
+- [ ] **5. Écran de demande** : tuile sur l'accueil, formulaire, route d'aperçu PDF, envoi, historique.
 - [ ] **6. Contrôles finaux** : `npx tsc --noEmit`, `npm run build`, tests manuels sur dev. Merge `dev` → `main` et mise à jour de la prod **uniquement sur demande de Yann**.
 
 ## Décisions prises
@@ -40,12 +43,12 @@
 - **Date souhaitée** (`@db.Date`, renvoyée à minuit UTC) : formatage avec `timeZone: 'UTC'` pour éviter un décalage d'un jour.
 - **Statut `BROUILLON`** : l'aperçu n'écrit rien en base. Au clic sur « Envoyer » : création de la demande en `BROUILLON` → envoi → `ENVOYEE` ou `ERREUR`.
 - **Historique** : la liste ne charge jamais la colonne `pdf` ; le PDF est servi par une route dédiée au clic.
+- **Route d'aperçu PDF reportée à l'étape 5** (13/11/2026) : elle n'est écrite qu'une fois, dans sa forme définitive. Elle reçoit la saisie du formulaire et calcule elle-même côté serveur président, emails, demandeur, etc. (le navigateur n'envoie jamais les textes à imprimer tels quels). Pas de route provisoire.
 - **Écran Bureau** : un seul président par saison (contrôle applicatif) ; plusieurs membres du CODIR possibles ; la reprise de la saison précédente se fait par nom + prénom et liste les personnes introuvables sans rien inventer.
 
 ## Points encore ouverts
 
 - **Droits de création / envoi** des demandes : tout utilisateur connecté pour l'instant, restriction éventuelle non décidée (spec § 8).
 - **Écran de gestion des destinataires** : optionnel, plus tard.
-- **Calibrage du décalage vertical `dy`** (environ 2,5 pt annoncés) : à valider visuellement à l'étape 2.
 - **Fichier modèle de test** : il s'appelle en réalité `tmp/3fc0068c-LEO_LAGRANGE_DEMANDE_ENTREE_PISCINE.pdf` (13 champs vérifiés, conformes).
 - **Mise en production** (`db push` + script SQL sur la prod, merge vers `main`) : à planifier avec Yann à la fin.

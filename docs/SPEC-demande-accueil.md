@@ -245,7 +245,7 @@ Le modèle (PDF exporté depuis LibreOffice avec « Créer un formulaire PDF »)
   // ...
   form.flatten()   // le PDF envoyé n'est plus modifiable
   ```
-- **Décalage vertical** : les zones `president_*` et `demandeur_*` sont plus hautes que la ligne → le texte apparaît 2-3 pt trop haut par rapport aux libellés. Abaisser le rectangle du widget d'environ 2,5 pt avant remplissage (valeur `dy` dans le style, réglable).
+- **Décalage vertical** : réglage `dy` par champ (abaisse le rectangle du widget avant remplissage), surchargeable par saison. Calibré le 12/11/2026 sur le modèle 2026 : **`dy = 0`** donne des lignes de base alignées sur les libellés (les 2,5 pt envisagés au PoC plaçaient le texte trop bas).
 - Champ manquant dans le modèle → erreur explicite listant les champs attendus/trouvés (vérifiée aussi à l'upload du modèle).
 - Champ vide (ex. responsable 2 absent) → laisser vide.
 
@@ -316,10 +316,10 @@ Suivi détaillé : `docs/AVANCEMENT-demande-accueil.md`.
 ## 10. Découpage
 
 1. Schéma Prisma + `db push` sur la base **dev** + script SQL.
-2. `pdf-demande-accueil.ts` + route d'aperçu, testés avec le modèle fourni.
+2. `pdf-demande-accueil.ts`, testé avec le modèle fourni (la route d'aperçu est faite à l'étape 5, décision du 13/11/2026).
 3. Upload du modèle dans la gestion des saisons + accès `/saisons` réservé aux admins.
 4. Écran « Bureau » (fonctions / président).
-5. Écran de demande + envoi + historique.
+5. Écran de demande + route d'aperçu + envoi + historique.
 6. `npx tsc --noEmit`, `npm run build`, tests manuels, puis merge `dev` → `main` sur demande de Yann.
 
 ## 11. À faire plus tard (optionnel)
