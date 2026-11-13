@@ -65,6 +65,7 @@ export default function ConfigMenu({ user }: ConfigMenuProps) {
                 </span>
               </div>
               <MenuItem href="/saisons"      icon="saison"      label="Gestion des saisons"      onClick={() => setOpen(false)} />
+              <MenuItem href="/admin/bureau" icon="bureau"      label="Bureau"                   onClick={() => setOpen(false)} />
               <MenuItem href="/admin/users"  icon="users"       label="Utilisateurs"             onClick={() => setOpen(false)} />
             </>
           )}
@@ -81,7 +82,7 @@ function MenuItem({
   onClick,
 }: {
   href: string
-  icon: 'smtp' | 'saison' | 'users' | 'key'
+  icon: 'smtp' | 'saison' | 'users' | 'key' | 'bureau'
   label: string
   onClick: () => void
 }) {
@@ -112,6 +113,12 @@ function MenuItem({
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="7.5" cy="15.5" r="4.5"/>
         <path d="M10.7 12.3L21 2M16 7l3 3M18.5 4.5l2 2"/>
+      </svg>
+    ),
+    bureau: (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+        <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>
       </svg>
     ),
   }

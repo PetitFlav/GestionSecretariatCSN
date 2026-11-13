@@ -15,13 +15,18 @@
   - [x] `src/lib/pdf-demande-accueil.ts` (12/11/2026) : `verifierModeleDemande`, `genererPdfDemande`, styles par défaut surchargeables, réduction auto des textes longs (min 7 pt), formats `formaterJour` / `formaterHoraires` / `formaterPrenomNom`. Testé sur le modèle 2026 avec données fictives : rendu conforme, accents OK, erreur explicite sur un modèle sans champs.
   - [x] Calibrage : **`dy = 0`** (lignes de base alignées sur les libellés ; à 2,5 pt le texte était trop bas). Réglage conservé, surchargeable par saison.
   - Route d'aperçu : **reportée à l'étape 5** (décision de Yann, 13/11/2026), voir « Autres décisions ».
-- [ ] **3. Modèle PDF dans la gestion des saisons** — code fait le 13/11/2026, `tsc` + `build` OK, **test manuel à faire par Yann**
+- [x] **3. Modèle PDF dans la gestion des saisons** — fait le 13/11/2026, `tsc` + `build` OK, modèle 2026 chargé sur la saison active en dev
   - [x] Upload du modèle (`requireAdmin`) avec vérification des 13 champs : `src/app/actions/modele-demande.ts` (`enregistrerModeleDemande`). Max 900 Ko (limite Next de 1 Mo des server actions, non modifiée). Re-upload = remplacement du PDF, réglages `champs` conservés.
   - [x] Bloc « Modèle demande piscine » sur **chaque** saison (pour préparer la saison suivante avant activation), confirmation avant remplacement.
   - [x] Page `/saisons` réservée aux ADMIN / SUPERUSER (redirection des autres vers l'accueil).
   - [x] Liens « Gestion des saisons » des pages Import, Statistiques et Extractions O.M.S. affichés aux admins seulement ; les autres voient « Contactez un administrateur ».
-  - ⚠ Les actions existantes `creerSaison` / `activerSaison` (`src/app/actions/import.ts`, intouchable) et `definirDateAG` restent en `requireAuth` : la page est cachée aux non-admins mais ces actions ne sont pas verrouillées côté serveur.
-- [ ] **4. Écran « Bureau »** dans le menu Config (partie Administration), `requireAdmin`.
+  - ⚠ Les actions existantes `creerSaison` / `activerSaison` (`src/app/actions/import.ts`, intouchable) et `definirDateAG` restent en `requireAuth` : la page est cachée aux non-admins mais ces actions ne sont pas verrouillées côté serveur. **Décision de Yann (13/11/2026) : on ne fait rien pour le moment.**
+- [ ] **4. Écran « Bureau »** dans le menu Config (partie Administration), `requireAdmin` — code fait le 13/11/2026, `tsc` + `build` OK, **test manuel à faire**
+  - `src/lib/saisons.ts` : `ordreDateFr`, `getSaisonPrecedente` (tri sur `dateDebut` converti ; resservira à l'étape 5 pour le président).
+  - `src/app/actions/bureau.ts` : `ajouterFonction` (un seul président par saison), `retirerFonction`, `reprendreBureauPrecedent` (correspondance stricte `makeKey`, rien d'effacé, compte rendu : recopiés / déjà en place / introuvables / conflits).
+  - Page `/admin/bureau` (+ `BureauClient.tsx`) : choix de la saison (active par défaut), une carte par fonction active, recherche parmi les adhérents de la saison (**invités exclus**).
+  - Entrée « Bureau » dans `ConfigMenu.tsx` (partie Administration).
+  - Choix faits : seul le président est limité à une personne (secrétaire / trésorier / CODIR : plusieurs possibles, ex. adjoints) ; une même personne peut cumuler deux fonctions.
 - [ ] **5. Écran de demande** : tuile sur l'accueil, formulaire, route d'aperçu PDF, envoi, historique.
 - [ ] **6. Contrôles finaux** : `npx tsc --noEmit`, `npm run build`, tests manuels sur dev. Merge `dev` → `main` et mise à jour de la prod **uniquement sur demande de Yann**.
 
