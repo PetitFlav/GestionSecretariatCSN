@@ -27,7 +27,13 @@
   - Page `/admin/bureau` (+ `BureauClient.tsx`) : choix de la saison (active par défaut), une carte par fonction active, recherche parmi les adhérents de la saison (**invités exclus**).
   - Entrée « Bureau » dans `ConfigMenu.tsx` (partie Administration).
   - Choix faits : seul le président est limité à une personne (secrétaire / trésorier / CODIR : plusieurs possibles, ex. adjoints) ; une même personne peut cumuler deux fonctions.
-- [ ] **5. Écran de demande** : tuile sur l'accueil, formulaire, route d'aperçu PDF, envoi, historique.
+- [ ] **5. Écran de demande** : tuile sur l'accueil, formulaire, route d'aperçu PDF, envoi, historique — code fait le 13/11/2026, `tsc` + `build` OK, 15 tests des fonctions pures OK, **test manuel à faire (destinataire de test d'abord !)**
+  - `src/lib/demande-accueil.ts` : fonctions pures (contrôles de saisie, dédoublonnage À/CC, expéditeur, objet, corps, nom du fichier).
+  - `src/lib/demande-accueil-serveur.ts` : `chargerContexte` (écran), `trouverPresident` (saison active, sinon précédente), téléphones mémorisés chiffrés, **`preparerDemande`** = seul calcul des textes et adresses, partagé par l'aperçu et l'envoi (le navigateur n'envoie que des ids et des nombres).
+  - `POST /api/demande-accueil/apercu` (rien en base) ; `GET /api/demande-accueil/[id]/pdf` (PDF de l'historique).
+  - `src/app/actions/demande-accueil.ts` : `envoyerDemande` (SMTP validé exigé, BROUILLON → envoi → ENVOYEE / ERREUR, puis sélection des destinataires et téléphones mémorisés).
+  - Page `/demande-accueil` + tuile sur l'accueil ; aperçu affiché dans la page ; historique de la saison.
+  - Choix faits : téléphones président / demandeur **obligatoires** ; invités exclus des responsables de l'accueil ; avertissements non bloquants calculés par l'écran (délai < 15 jours, président repris, personnes sans courriel).
 - [ ] **6. Contrôles finaux** : `npx tsc --noEmit`, `npm run build`, tests manuels sur dev. Merge `dev` → `main` et mise à jour de la prod **uniquement sur demande de Yann**.
 
 ## Décisions prises

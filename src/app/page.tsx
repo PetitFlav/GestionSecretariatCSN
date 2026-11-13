@@ -141,7 +141,29 @@ export default async function HomePage() {
           </Link>
 
         </div>
-        
+
+        {/* Demande d'accueil piscine Léo Lagrange */}
+        <Link
+          href="/demande-accueil"
+          className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
+          style={{ border: '0.5px solid var(--csn-border-strong)' }}
+        >
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'var(--csn-light)' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+              <path d="M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5S16 18 18 18s2-1.5 4-1.5"/>
+              <path d="M2 22c2 0 2-1.5 4-1.5S8 22 10 22s2-1.5 4-1.5S16 22 18 22s2-1.5 4-1.5"/>
+              <path d="M8 14V4a2 2 0 014 0M16 14V4a2 2 0 00-4 0M8 8h8"/>
+            </svg>
+          </div>
+          <div>
+            <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Demande d&apos;accueil piscine</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Baptêmes, initiations : formulaire Léo Lagrange par email</div>
+          </div>
+        </Link>
+
       </div>
     </AppLayout>
   )
