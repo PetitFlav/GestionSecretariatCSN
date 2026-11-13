@@ -3,6 +3,12 @@ import Link from 'next/link'
 import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 
+// Organisation de l'accueil (par fréquence d'usage) :
+//   1. Importation (pleine largeur, en avant)
+//   2. Étiquettes · Attestations · Demande piscine   (usage courant)
+//   3. Suivi & alertes · Statistiques
+//   4. Extractions O.M.S (seule, une fois par an)
+
 export default async function HomePage() {
   const user = await getSessionUser()
   if (!user || user.status !== 'ACTIVE') redirect('/login')
@@ -11,7 +17,7 @@ export default async function HomePage() {
     <AppLayout user={user}>
       <div className="max-w-lg mx-auto px-4 py-10 flex flex-col gap-4">
 
-        {/* Bouton Importation — en avant, pleine largeur */}
+        {/* ── 1. Importation — en avant, pleine largeur ─────────────── */}
         <Link
           href="/import"
           className="flex items-center gap-4 rounded-xl px-5 py-4 text-white transition-opacity hover:opacity-90"
@@ -33,7 +39,7 @@ export default async function HomePage() {
           </div>
         </Link>
 
-        {/* Boutons secondaires côte à côte */}
+        {/* ── 2. Étiquettes · Attestations · Demande piscine ───────── */}
         <div className="grid grid-cols-3 gap-3">
 
           {/* Édition étiquettes */}
@@ -74,28 +80,50 @@ export default async function HomePage() {
             </div>
           </Link>
 
-          {/* Suivi & alertes */}
-          <Link href="/suivi"
+          {/* Demande d'accueil piscine Léo Lagrange */}
+          <Link href="/demande-accueil"
             className="flex flex-col gap-2.5 rounded-xl p-4 bg-white transition-colors hover:bg-slate-50"
             style={{ border: '0.5px solid var(--csn-border-strong)' }}>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background: 'var(--csn-light)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                <path d="M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5S16 18 18 18s2-1.5 4-1.5"/>
+                <path d="M2 22c2 0 2-1.5 4-1.5S8 22 10 22s2-1.5 4-1.5S16 22 18 22s2-1.5 4-1.5"/>
+                <path d="M8 14V4a2 2 0 014 0M16 14V4a2 2 0 00-4 0M8 8h8"/>
               </svg>
             </div>
             <div>
               <div className="text-[13px] font-medium" style={{ color: 'var(--csn-navy)' }}>
-                Suivi & alertes
+                Demande piscine
               </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">CACI, FFESSM</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Accueil Léo Lagrange</div>
             </div>
           </Link>
 
         </div>
 
-        {/* Statistiques (gauche) + Extractions O.M.S (droite) */}
+        {/* ── 3. Suivi & alertes · Statistiques ────────────────────── */}
         <div className="grid grid-cols-2 gap-3">
+
+          {/* Suivi & alertes */}
+          <Link
+            href="/suivi"
+            className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}
+          >
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--csn-light)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Suivi & alertes</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">CACI, FFESSM</div>
+            </div>
+          </Link>
 
           {/* Statistiques */}
           <Link
@@ -118,33 +146,11 @@ export default async function HomePage() {
             </div>
           </Link>
 
-          {/* Extractions O.M.S */}
-          <Link
-            href="/extractions-oms"
-            className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
-            style={{ border: '0.5px solid var(--csn-border-strong)' }}
-          >
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--csn-light)' }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="9" y1="15" x2="15" y2="15"/>
-              </svg>
-            </div>
-            <div>
-              <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Extractions O.M.S</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">Export pour l&apos;Office Municipal des Sports</div>
-            </div>
-          </Link>
-
         </div>
 
-        {/* Demande d'accueil piscine Léo Lagrange */}
+        {/* ── 4. Extractions O.M.S — seule, une fois par an ────────── */}
         <Link
-          href="/demande-accueil"
+          href="/extractions-oms"
           className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
           style={{ border: '0.5px solid var(--csn-border-strong)' }}
         >
@@ -153,14 +159,14 @@ export default async function HomePage() {
             style={{ background: 'var(--csn-light)' }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
-              <path d="M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5S16 18 18 18s2-1.5 4-1.5"/>
-              <path d="M2 22c2 0 2-1.5 4-1.5S8 22 10 22s2-1.5 4-1.5S16 22 18 22s2-1.5 4-1.5"/>
-              <path d="M8 14V4a2 2 0 014 0M16 14V4a2 2 0 00-4 0M8 8h8"/>
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
             </svg>
           </div>
           <div>
-            <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Demande d&apos;accueil piscine</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Baptêmes, initiations : formulaire Léo Lagrange par email</div>
+            <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Extractions O.M.S</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Export pour l&apos;Office Municipal des Sports</div>
           </div>
         </Link>
 
