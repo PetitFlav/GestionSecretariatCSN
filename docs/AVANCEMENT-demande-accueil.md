@@ -35,6 +35,9 @@
   - Page `/demande-accueil` + tuile sur l'accueil ; aperçu affiché dans la page ; historique de la saison.
   - Choix faits : téléphones président / demandeur **obligatoires** ; invités exclus des responsables de l'accueil ; avertissements non bloquants calculés par l'écran (délai < 15 jours, président repris, personnes sans courriel).
 - [ ] **6. Contrôles finaux** : `npx tsc --noEmit`, `npm run build`, tests manuels sur dev. Merge `dev` → `main` et mise à jour de la prod **uniquement sur demande de Yann**.
+  - [x] **Base de prod** (`ep-tiny-mountain`), le 14/11/2026 vers 01h45, à la demande de Yann : `migrate diff` prod → schéma identique au diff attendu (8 tables + enum + index + FK, aucun DROP/ALTER sur l'existant) ; `db push` sans `--accept-data-loss` ; script `2026-11-demande-accueil.sql` (4 types, 4 fonctions, 6 destinataires mairie **actifs**, contrainte). Comptes avant/après identiques (2 saisons, 695 adhérents, 4 users, 290 impressions, 42 attestations, 540 validations). Prod alignée sur le schéma (`migrate diff --exit-code` = 0).
+  - [ ] Merge `feat/demande-accueil` → `dev` → `main` (Yann) → déploiement Vercel.
+  - [ ] Après déploiement, en prod (données, pas de code) : charger le modèle PDF sur la saison active (Gestion des saisons), désigner le bureau / président (Config → Bureau), vérifier la config SMTP validée de l'utilisateur qui envoie.
 
 ## Décisions prises
 
