@@ -107,7 +107,11 @@ function filtreSection(l: StatLigne, section: string): boolean {
 
 // ── Composant ────────────────────────────────────────────────────────────────
 
-export default function StatistiquesClient({ data, diplomes }: { data: StatsData; diplomes: DiplomesData }) {
+// lectureSeule : page d'AG ouverte par lien secret (/ag/<jeton>) → aucune
+// action d'écriture proposée (pas d'import des brevets).
+export default function StatistiquesClient({ data, diplomes, lectureSeule = false }: {
+  data: StatsData; diplomes: DiplomesData; lectureSeule?: boolean
+}) {
   const { saisons, lignes, reinscriptions } = data
   const active = saisons.find(s => s.isActive) ?? saisons[saisons.length - 1]
 
@@ -298,7 +302,7 @@ export default function StatistiquesClient({ data, diplomes }: { data: StatsData
             labelSaison={labelSaison} />
         )}
 
-        {estDiplomes && <div className="mt-4"><Diplomes data={diplomes} /></div>}
+        {estDiplomes && <div className="mt-4"><Diplomes data={diplomes} lectureSeule={lectureSeule} /></div>}
 
       </div>
 

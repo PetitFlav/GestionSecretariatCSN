@@ -25,7 +25,7 @@ interface Groupe  { famille: Famille; lignes: Ligne[]; sousTotal: Record<string,
 // Ligne du graphique : s0, s1… = nombre pour la saison d'indice 0, 1…
 type Point = { label: string } & Record<string, string | number>
 
-export default function Diplomes({ data }: { data: DiplomesData }) {
+export default function Diplomes({ data, lectureSeule = false }: { data: DiplomesData; lectureSeule?: boolean }) {
   // Ordre chronologique (ancienne → récente) pour les barres et les couleurs
   const saisons  = data.saisons.map(s => s.saison).sort()
   const couleurs = couleursSaisons(saisons.length)
@@ -75,10 +75,11 @@ export default function Diplomes({ data }: { data: DiplomesData }) {
     return (
       <div className="flex flex-col gap-5">
         <div className="py-16 text-center text-[13px] text-slate-400">
-          Aucune liste de brevets importée. Utilisez le bloc ci-dessous avec l&apos;export FFESSM
-          « Liste des brevets » d&apos;une saison.
+          Aucune liste de brevets importée.
+          {!lectureSeule && <> Utilisez le bloc ci-dessous avec l&apos;export FFESSM
+          « Liste des brevets » d&apos;une saison.</>}
         </div>
-        <ImportBrevets />
+        {!lectureSeule && <ImportBrevets />}
       </div>
     )
   }
@@ -164,7 +165,7 @@ export default function Diplomes({ data }: { data: DiplomesData }) {
         </p>
       </div>
 
-      <ImportBrevets />
+      {!lectureSeule && <ImportBrevets />}
     </div>
   )
 }

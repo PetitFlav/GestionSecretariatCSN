@@ -9,6 +9,9 @@ const PUBLIC_ROUTES = [
   '/auth/setup-password',
   '/auth/forgot-password',
   '/auth/reset-password',
+  // Statistiques d'AG par lien secret : la page vérifie elle-même le jeton
+  // (404 sinon) et n'affiche que des agrégats en lecture seule.
+  '/ag/',
 ]
 
 export async function middleware(request: NextRequest) {
