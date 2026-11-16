@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import { getSessionUser } from '@/lib/session'
 import { getStatsData } from '@/app/actions/statistiques'
+import { getDiplomesData } from '@/app/actions/brevets'
 import StatistiquesClient from './StatistiquesClient'
 
 // Toujours recalculé à l'affichage (pas de cache de page) : un import fait
@@ -12,7 +13,7 @@ export default async function StatistiquesPage() {
   const user = await getSessionUser()
   if (!user || user.status !== 'ACTIVE') redirect('/login')
 
-  const data = await getStatsData()
+  const [data, diplomes] = await Promise.all([getStatsData(), getDiplomesData()])
 
   return (
     <AppLayout user={user} showBack={true}>
@@ -38,7 +39,7 @@ export default async function StatistiquesPage() {
             )}
           </div>
         ) : (
-          <StatistiquesClient data={data} />
+          <StatistiquesClient data={data} diplomes={diplomes} />
         )}
       </div>
     </AppLayout>

@@ -142,6 +142,24 @@ model ValidationFFESSM {
   @@map("validations_ffessm")
 }
 
+// Brevets obtenus au club — export FFESSM « Liste des brevets » (statistiques).
+// La saison est un LIBELLÉ lu dans l'en-tête du fichier (« 2025-2026 »), pas
+// une relation vers Saison : on garde l'historique des saisons qui n'existent
+// pas dans l'appli (2024-2025…) sans créer de saison vide.
+// Pas de nom : seul le n° de licence est gardé (croisement futur avec les
+// adhérents). Réimporter une saison remplace tous ses brevets.
+model Brevet {
+  id            String   @id @default(cuid())
+  saison        String   // « 2025-2026 »
+  niveau        String   // libellé FFESSM brut (« Apnéiste / Indoor Freediver 1 CMAS »)
+  dateObtention String?  // JJ/MM/AAAA
+  licence       String?  // « A-25-4270360 »
+  createdAt     DateTime @default(now())
+
+  @@index([saison])
+  @@map("brevets")
+}
+
 model User {
   id               String          @id @default(cuid())
   firstName        String          @default("")

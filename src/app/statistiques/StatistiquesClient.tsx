@@ -8,6 +8,9 @@ import {
   Tooltip, Legend,
 } from 'recharts'
 import type { StatsData, StatLigne, StatReinscription, TypeReinscription } from '@/app/actions/statistiques'
+import type { DiplomesData } from '@/app/actions/brevets'
+import Diplomes from './Diplomes'
+import { couleursSaisons } from './couleurs'
 import { SEXE_LABEL, type Sexe } from '@/lib/sexe'
 import { TRANCHE_LABEL, ORDRE_TRANCHES, type TrancheId } from '@/lib/ages'
 
@@ -19,6 +22,7 @@ const STATS = [
   { id: 'age',  label: "Répartition par tranche d'âge" },
   { id: 'reinscription', label: 'Taux de réinscription' },
   { id: 'composition',   label: 'Sections : anciens / nouveaux' },
+  { id: 'diplomes',      label: 'Diplômes obtenus' },
 ] as const
 type StatId = typeof STATS[number]['id']
 
@@ -52,17 +56,7 @@ const LABEL_REINSC: Record<TypeReinscription, string> = {
 // Âges — une saison : un seul bleu (une seule série), gris pour NR.
 const COULEUR_AGE    = '#2a78d6'
 const COULEUR_AGE_NR = '#94a3b8'
-// Âges — évolution : une couleur par saison, du plus clair (ancienne) au plus
-// foncé (récente), même teinte : la lecture « avant → maintenant » est immédiate.
-const RAMPE_SAISONS = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281']
-function couleursSaisons(n: number): string[] {
-  // Répartit les n saisons sur toute la rampe : avec 2 saisons on obtient le
-  // plus clair et le plus foncé (bien distincts), jamais deux bleus voisins.
-  if (n <= 1) return [RAMPE_SAISONS[RAMPE_SAISONS.length - 1]]
-  const L = RAMPE_SAISONS.length
-  return Array.from({ length: n }, (_, i) =>
-    RAMPE_SAISONS[Math.min(L - 1, Math.round((i * (L - 1)) / (n - 1)))])
-}
+// Âges — évolution : une couleur par saison (rampe partagée, cf. couleurs.ts).
 
 // ── Petits helpers ───────────────────────────────────────────────────────────
 
@@ -113,7 +107,7 @@ function filtreSection(l: StatLigne, section: string): boolean {
 
 // ── Composant ────────────────────────────────────────────────────────────────
 
-export default function StatistiquesClient({ data }: { data: StatsData }) {
+export default function StatistiquesClient({ data, diplomes }: { data: StatsData; diplomes: DiplomesData }) {
   const { saisons, lignes, reinscriptions } = data
   const active = saisons.find(s => s.isActive) ?? saisons[saisons.length - 1]
 
@@ -122,6 +116,9 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
   // « Anciens / nouveaux par section » : vue d'une saison uniquement pour
   // l'instant (une seule saison a des sections). L'évolution viendra en 2028.
   const mode: Mode = stat === 'composition' ? 'saison' : modeChoisi
+  // Diplômes : tableau autonome (toutes les saisons importées en colonnes,
+  // saisons FFESSM indépendantes de la table des saisons) → filtres inactifs.
+  const estDiplomes = stat === 'diplomes'
   const [saisonId, setSaisonId] = useState(active.id)
   const [section,  setSection]  = useState<string>(TOUTES)
 
@@ -146,7 +143,7 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
   // en ont (sinon les non-réinscrits n'ont pas de section connue).
   const aSections = (id: string) => saisons.find(s => s.id === id)?.hasSections ?? false
   const reinscSaison = reinscriptions.find(r => r.saisonId === saison.id) ?? null
-  const sectionDisabled = stat === 'composition'
+  const sectionDisabled = stat === 'composition' || estDiplomes
     ? true                                   // la vue EST déjà découpée par section
     : stat === 'reinscription'
     ? (mode === 'saison'
@@ -238,7 +235,9 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
     : stat === 'age' ? "Tranches d'âge"
     : 'Réinscription'
   const titre =
-    stat === 'composition'
+    estDiplomes
+      ? 'Diplômes obtenus au club (brevets FFESSM)'
+    : stat === 'composition'
       ? `Anciens et nouveaux par section — ${saison.label}`
     : stat === 'reinscription' && mode === 'saison'
       ? (reinscSaison
@@ -299,6 +298,8 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
             labelSaison={labelSaison} />
         )}
 
+        {estDiplomes && <div className="mt-4"><Diplomes data={diplomes} /></div>}
+
       </div>
 
       {/* ── Bandeau de filtres ────────────────────────────────────────────── */}
@@ -313,9 +314,10 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
         </Filtre>
 
         <Filtre label="Affichage"
-          hint={stat === 'composition' ? "Évolution disponible quand deux saisons consécutives auront des sections." : undefined}>
+          hint={estDiplomes ? 'Le tableau des diplômes affiche toutes les saisons importées.'
+            : stat === 'composition' ? "Évolution disponible quand deux saisons consécutives auront des sections." : undefined}>
           <select value={mode} onChange={e => setMode(e.target.value as Mode)}
-            disabled={stat === 'composition'}
+            disabled={stat === 'composition' || estDiplomes}
             className={selectCls} style={selectStyle}>
             <option value="saison">Saison choisie</option>
             <option value="evolution">Évolution année par année</option>
@@ -323,9 +325,10 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
         </Filtre>
 
         <Filtre label="Saison"
-          hint={mode === 'evolution' ? 'Toutes les saisons sont affichées en mode évolution.' : undefined}>
+          hint={estDiplomes ? 'Le tableau des diplômes affiche toutes les saisons importées.'
+            : mode === 'evolution' ? 'Toutes les saisons sont affichées en mode évolution.' : undefined}>
           <select value={saison.id} onChange={e => setSaisonId(e.target.value)}
-            disabled={mode === 'evolution'}
+            disabled={mode === 'evolution' || estDiplomes}
             className={selectCls} style={selectStyle}>
             {[...saisons].reverse().map(s => (
               <option key={s.id} value={s.id}>
@@ -336,7 +339,8 @@ export default function StatistiquesClient({ data }: { data: StatsData }) {
         </Filtre>
 
         <Filtre label="Section"
-          hint={stat === 'composition' ? 'Cette vue affiche déjà toutes les sections.'
+          hint={estDiplomes ? 'Les diplômes sont groupés par famille, pas par section.'
+            : stat === 'composition' ? 'Cette vue affiche déjà toutes les sections.'
             : sectionDisabled ? 'Pas de sections enregistrées pour cette saison.' : undefined}>
           <select value={sectionEff} onChange={e => setSection(e.target.value)}
             disabled={sectionDisabled}
