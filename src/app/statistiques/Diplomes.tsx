@@ -1,13 +1,12 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useState } from 'react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   LabelList, Tooltip, Legend, Text,
 } from 'recharts'
-import { importerBrevets, type DiplomesData, type ImportBrevetsResult } from '@/app/actions/brevets'
-import { classerBrevet, ORDRE_FAMILLES, type Famille } from '@/lib/brevets'
+import type { DiplomesData, DiplomesSaison } from '@/app/actions/brevets'
+import { classerBrevet, ordreFamilles, type Famille } from '@/lib/brevets'
 import { couleursSaisons } from './couleurs'
 
 // ── Diplômes obtenus (brevets FFESSM) ────────────────────────────────────────
@@ -34,7 +33,7 @@ export default function Diplomes({ data, lectureSeule = false }: { data: Diplome
   const groupes = useMemo<Groupe[]>(() => {
     const parFamille = new Map<Famille, Map<string, Ligne>>()
     for (const l of data.lignes) {
-      const c = classerBrevet(l.niveau)
+      const c = classerBrevet(l.niveau, l.famille)   // catégorie saisie prioritaire
       const lignes = parFamille.get(c.famille) ?? new Map<string, Ligne>()
       parFamille.set(c.famille, lignes)
       // Plusieurs libellés FFESSM peuvent donner le même libellé court : cumulés
@@ -42,8 +41,7 @@ export default function Diplomes({ data, lectureSeule = false }: { data: Diplome
       lignes.set(c.libelle, ligne)
       ligne.parSaison[l.saison] = (ligne.parSaison[l.saison] ?? 0) + l.count
     }
-    return ORDRE_FAMILLES
-      .filter(f => parFamille.has(f))
+    return ordreFamilles(parFamille.keys())
       .map(famille => {
         const lignes = Array.from(parFamille.get(famille)!.values())
           .sort((a, b) => a.ordre - b.ordre || a.libelle.localeCompare(b.libelle, 'fr', { numeric: true }))
@@ -75,11 +73,11 @@ export default function Diplomes({ data, lectureSeule = false }: { data: Diplome
     return (
       <div className="flex flex-col gap-5">
         <div className="py-16 text-center text-[13px] text-slate-400">
-          Aucune liste de brevets importée.
-          {!lectureSeule && <> Utilisez le bloc ci-dessous avec l&apos;export FFESSM
-          « Liste des brevets » d&apos;une saison.</>}
+          Aucun diplôme enregistré.
+          {!lectureSeule && <> Importez l&apos;export FFESSM « Liste des brevets » ou
+          saisissez un diplôme dans{' '}
+          <a href="/diplomes" className="underline">Gestion des diplômes</a>.</>}
         </div>
-        {!lectureSeule && <ImportBrevets />}
       </div>
     )
   }
@@ -160,14 +158,20 @@ export default function Diplomes({ data, lectureSeule = false }: { data: Diplome
             ? <>Détail de la famille « {groupe.famille} ». Revenez à la vue d&apos;ensemble avec « Global ».</>
             : <>Cliquez sur une famille pour voir le détail de ses diplômes.</>}
           <br />
-          Source : export FFESSM « Liste des brevets » (saison FFESSM indiquée dans le fichier) —{' '}
-          {data.saisons.map(s => `${s.saison} importée le ${s.importeLe}`).join(' · ')}.
+          Source : export FFESSM « Liste des brevets » (saison FFESSM indiquée dans le fichier)
+          et diplômes saisis à la main —{' '}
+          {data.saisons.map(origine).join(' · ')}.
         </p>
       </div>
-
-      {!lectureSeule && <ImportBrevets />}
     </div>
   )
+}
+
+// « 2025-2026 importée le 16/11/2026 (dont 2 saisis) »
+function origine(s: DiplomesSaison): string {
+  const saisis = s.saisis ? `${s.saisis} saisi${s.saisis > 1 ? 's' : ''}` : ''
+  if (!s.importeLe) return `${s.saison} : ${saisis}`
+  return `${s.saison} importée le ${s.importeLe}${saisis ? ` (dont ${saisis})` : ''}`
 }
 
 // Libellé d'abscisse sur plusieurs lignes : les noms de diplômes sont longs
@@ -183,81 +187,5 @@ function TickMultiligne(props: {
       style={{ fontSize: 14, fill: '#475569' }}>
       {payload?.value ?? ''}
     </Text>
-  )
-}
-
-// ── Import d'un export « Liste des brevets » ─────────────────────────────────
-
-function ImportBrevets() {
-  const router = useRouter()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [fichier, setFichier] = useState<string | null>(null)
-  const [enCours, setEnCours] = useState(false)
-  const [resultat, setResultat] = useState<ImportBrevetsResult | null>(null)
-
-  async function envoyer(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setEnCours(true)
-    setResultat(null)
-    try {
-      const res = await importerBrevets(new FormData(e.currentTarget))
-      setResultat(res)
-      if (res.success) {
-        setFichier(null)
-        if (inputRef.current) inputRef.current.value = ''
-        router.refresh()                    // recharge le tableau avec la nouvelle saison
-      }
-    } catch (err) {
-      setResultat({ success: false, error: String(err) })
-    } finally {
-      setEnCours(false)
-    }
-  }
-
-  return (
-    <form onSubmit={envoyer} className="rounded-lg p-4 flex flex-col gap-3"
-      style={{ border: '0.5px dashed var(--csn-border-strong)' }}>
-      <div className="text-[12px] text-slate-500">
-        Importer une liste des brevets (export FFESSM, une saison par fichier).
-        La saison est lue dans le fichier ; si elle est déjà importée, ses brevets sont remplacés.
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div
-          className="flex-1 flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer hover:bg-slate-50"
-          style={{ border: '0.5px solid var(--csn-border-strong)', background: 'var(--csn-cream)' }}
-          onClick={() => inputRef.current?.click()}
-        >
-          <span className="text-[13px] flex-1 truncate"
-            style={{ color: fichier ? 'var(--csn-navy)' : '#94a3b8' }}>
-            {fichier ?? 'Cliquez pour sélectionner ListeBrevets….xlsx'}
-          </span>
-        </div>
-        <input ref={inputRef} type="file" name="brevets" accept=".xlsx,.xls" className="hidden"
-          onChange={e => { setFichier(e.target.files?.[0]?.name ?? null); setResultat(null) }} />
-        <button type="submit" disabled={!fichier || enCours}
-          className="px-4 py-2 rounded-lg text-[13px] font-medium text-white disabled:opacity-50"
-          style={{ background: 'var(--csn-navy)' }}>
-          {enCours ? 'Import en cours…' : 'Importer'}
-        </button>
-      </div>
-
-      {resultat && (
-        <div className="text-[12px] rounded-lg px-3 py-2"
-          style={resultat.success
-            ? { background: '#eaf7f0', color: '#1a6642' }
-            : { background: '#fff3cd', color: '#7a5a00' }}>
-          {resultat.success
-            ? <>Saison {resultat.saison} : {resultat.nb} brevet(s) importé(s)
-                {resultat.remplaces ? ` (remplacent les ${resultat.remplaces} précédents)` : ''}.</>
-            : resultat.error}
-          {resultat.erreurs && resultat.erreurs.length > 0 && (
-            <ul className="mt-1 space-y-0.5">
-              {resultat.erreurs.map((e, i) => <li key={i}>• {e}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
-    </form>
   )
 }

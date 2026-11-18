@@ -7,7 +7,7 @@ import { getSessionUser } from '@/lib/session'
 //   1. Importation (pleine largeur, en avant)
 //   2. Étiquettes · Attestations · Demande piscine   (usage courant)
 //   3. Suivi & alertes · Statistiques
-//   4. Extractions O.M.S (seule, une fois par an)
+//   4. Gestion des diplômes · Extractions O.M.S (usage occasionnel)
 
 export default async function HomePage() {
   const user = await getSessionUser()
@@ -148,27 +148,53 @@ export default async function HomePage() {
 
         </div>
 
-        {/* ── 4. Extractions O.M.S — seule, une fois par an ────────── */}
-        <Link
-          href="/extractions-oms"
-          className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
-          style={{ border: '0.5px solid var(--csn-border-strong)' }}
-        >
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--csn-light)' }}
+        {/* ── 4. Gestion des diplômes · Extractions O.M.S ──────────── */}
+        <div className="grid grid-cols-2 gap-3">
+
+          {/* Gestion des diplômes */}
+          <Link
+            href="/diplomes"
+            className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-          </div>
-          <div>
-            <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Extractions O.M.S</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Export pour l&apos;Office Municipal des Sports</div>
-          </div>
-        </Link>
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--csn-light)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+                <circle cx="12" cy="8" r="6"/>
+                <path d="M15.5 13.5L17 22l-5-3-5 3 1.5-8.5"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Gestion des diplômes</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Import FFESSM, saisie</div>
+            </div>
+          </Link>
+
+          {/* Extractions O.M.S — une fois par an */}
+          <Link
+            href="/extractions-oms"
+            className="flex items-center gap-3 rounded-xl px-4 py-4 bg-white transition-colors hover:bg-slate-50"
+            style={{ border: '0.5px solid var(--csn-border-strong)' }}
+          >
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--csn-light)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--csn-navy)" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[14px] font-medium" style={{ color: 'var(--csn-navy)' }}>Extractions O.M.S</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Export pour l&apos;Office Municipal des Sports</div>
+            </div>
+          </Link>
+
+        </div>
 
       </div>
     </AppLayout>

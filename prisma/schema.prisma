@@ -88,6 +88,8 @@ model Adherent {
   // à la table adherents (contrainte de la spec).
   fonctions           AdherentFonction[]
   demandesResponsable DemandeResponsableAccueil[]
+  // Diplômes saisis à la main (relation virtuelle, colonne côté brevets)
+  brevets             Brevet[]
 
   @@unique([saisonId, nom, prenom])
   @@index([saisonId])
@@ -155,8 +157,19 @@ model Brevet {
   dateObtention String?  // JJ/MM/AAAA
   licence       String?  // « A-25-4270360 »
   createdAt     DateTime @default(now())
+  // IMPORT = export FFESSM ; SAISIE = ajouté à la main (Gestion des diplômes).
+  // Un réimport FFESSM ne remplace que les brevets IMPORT de la saison.
+  source        SourceBrevet @default(IMPORT)
+  // Catégorie choisie à la saisie (« Pêche sous-marine »…) ; prime sur les
+  // règles de lib/brevets.ts. null = classement automatique (imports).
+  famille       String?
+  // Renseigné pour les saisies uniquement (l'export FFESSM n'a pas de nom).
+  // Fiche supprimée → le diplôme reste compté (licence + saison conservées).
+  adherentId    String?
+  adherent      Adherent?    @relation(fields: [adherentId], references: [id], onDelete: SetNull)
 
   @@index([saison])
+  @@index([adherentId])
   @@map("brevets")
 }
 
@@ -358,6 +371,11 @@ enum StatutAdherent {
   LICENCIE  // licence + adhésion au CSN
   EXTERNE   // adhésion CSN, licence prise dans un autre club
   PASSAGER  // licence via le CSN, sans adhésion (pas d'accès aux entraînements)
+}
+
+enum SourceBrevet {
+  IMPORT  // export FFESSM « Liste des brevets »
+  SAISIE  // saisi à la main dans Gestion des diplômes
 }
 
 enum PrintStatus {
