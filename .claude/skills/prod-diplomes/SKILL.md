@@ -29,18 +29,23 @@ git push origin dev
 
 ## 2. Base de prod (`ep-tiny-mountain`)
 
-Coller les URL prod (console Neon, branche **prod**) — DIRECT **sans** `-pooler` :
+Seule l'URL **DIRECT** prod est nécessaire (console Neon, branche **prod**, **sans** `-pooler`) :
+le CLI Prisma se connecte par `directUrl` ; l'URL `-pooler` ne sert qu'à l'appli sur Vercel.
+On la passe aussi à `DATABASE_URL` : vide → erreur P1012 ; absente → Prisma prendrait celle
+du `.env` (= **dev**).
+⚠️ Tout faire dans **le même terminal** : chaque onglet a ses propres variables.
 
 ```bash
-export PROD_DATABASE_URL='postgresql://…ep-tiny-mountain…-pooler…'
 export PROD_DIRECT_URL='postgresql://…ep-tiny-mountain…'
-echo "$PROD_DIRECT_URL" | grep -o "ep-[a-z]*-[a-z]*"      # doit afficher ep-tiny-mountain
+# Vérification (n'affiche que l'endpoint, jamais le mot de passe) :
+printf %s "$PROD_DIRECT_URL" | grep -o 'ep-[a-z]*-[a-z]*[^.]*' || echo VIDE
+# attendu : ep-tiny-mountain-xxxx  (sans -pooler, pas VIDE)
 ```
 
 **a) Contrôle en lecture seule** (ne modifie rien) :
 
 ```bash
-DATABASE_URL="$PROD_DATABASE_URL" DIRECT_URL="$PROD_DIRECT_URL" \
+DATABASE_URL="${PROD_DIRECT_URL:?VIDE}" DIRECT_URL="${PROD_DIRECT_URL:?VIDE}" \
   npx prisma migrate diff --from-schema-datasource prisma/schema.prisma \
   --to-schema-datamodel prisma/schema.prisma --script
 ```
@@ -57,7 +62,7 @@ Le SQL affiché doit contenir **uniquement** :
 **b) Application** (vérifier que la ligne « Datasource … at » affiche bien `ep-tiny-mountain`) :
 
 ```bash
-DATABASE_URL="$PROD_DATABASE_URL" DIRECT_URL="$PROD_DIRECT_URL" npx prisma db push
+DATABASE_URL="${PROD_DIRECT_URL:?VIDE}" DIRECT_URL="${PROD_DIRECT_URL:?VIDE}" npx prisma db push
 ```
 
 - Jamais `--accept-data-loss` (si Prisma le réclame → STOP).
@@ -65,7 +70,7 @@ DATABASE_URL="$PROD_DATABASE_URL" DIRECT_URL="$PROD_DIRECT_URL" npx prisma db pu
 - Relancer le contrôle a) : il doit maintenant afficher « This is an empty migration ».
 
 ```bash
-unset PROD_DATABASE_URL PROD_DIRECT_URL
+unset PROD_DIRECT_URL
 npx prisma generate          # client local de nouveau aligné sur .env (dev)
 ```
 
